@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Génova Sin TACC · Gestión</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="css/genova.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- ============ LOGIN / BIENVENIDA ============ -->
+  <section id="screen-login" class="screen screen-dark is-hidden">
+    <div class="dark-topbar"></div>
+    <div class="dark-grid-overlay"></div>
+    <div class="login-card">
+      <div class="brand-circle"><img src="assets/logo-sintacc.png" alt="Génova"></div>
+      <div class="brand-display">Génova <span>Sin TACC</span></div>
+      <div class="brand-kicker">Gestión operativa</div>
+      <p class="login-lead">Acceso exclusivo para socios autorizados. Iniciá sesión con tu cuenta de Google.</p>
+      <button id="btn-login" class="google-btn">
+        <span class="google-mark"></span>Continuar con Google
+      </button>
+      <div id="google-fallback"></div>
+      <div class="login-seal"><img src="assets/sello-singluten.jpg" alt="">Producción certificada sin gluten</div>
+    </div>
+  </section>
+
+  <!-- ============ BOOTING ============ -->
+  <section id="screen-booting" class="screen screen-dark is-hidden">
+    <div class="dark-topbar"></div>
+    <div class="boot-card">
+      <div class="brand-circle"><img src="assets/logo-sintacc.png" alt="Génova"></div>
+      <div class="brand-display sm">Génova <span>Sin TACC</span></div>
+      <div class="boot-bar"><div class="boot-bar-fill"></div></div>
+      <div class="boot-text">Verificando acceso…</div>
+    </div>
+  </section>
+
+  <!-- ============ ACCESO DENEGADO ============ -->
+  <section id="screen-denied" class="screen screen-dark is-hidden">
+    <div class="dark-topbar"></div>
+    <div class="denied-card">
+      <div class="denied-icon"><span class="ico"><i data-lucide="lock-keyhole"></i></span></div>
+      <div class="brand-display sm">Acceso denegado</div>
+      <p class="login-lead">La cuenta <span id="denied-email" class="mono"></span> no está autorizada. Pedile a un administrador que te agregue desde Configuración.</p>
+      <button id="btn-denied-back" class="google-btn">Probar con otra cuenta</button>
+    </div>
+  </section>
+
+  <!-- ============ APP ============ -->
+  <section id="screen-app" class="screen is-hidden">
+    <div class="app-root">
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sidebar-accent"></div>
+        <div class="sidebar-brand">
+          <div class="brand-circle sm"><img src="assets/logo-sintacc.png" alt="Génova"></div>
+          <div class="sidebar-brand-name">Génova<br><span>Sin TACC</span></div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <nav id="side-nav" class="side-nav"></nav>
+        <div class="sidebar-user">
+          <div class="sidebar-divider"></div>
+          <div class="user-row">
+            <div id="user-avatar" class="user-avatar">··</div>
+            <div class="user-meta">
+              <div id="user-name" class="user-name">—</div>
+              <div id="user-role" class="user-role">—</div>
+            </div>
+            <span id="btn-logout" class="icon-btn dark" title="Salir"><span class="ico"><i data-lucide="log-out"></i></span></span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN -->
+      <div class="main">
+        <header class="topbar">
+          <div class="topbar-left">
+            <div id="header-title" class="topbar-title">Dashboard</div>
+            <div id="month-picker" class="month-picker">
+              <button id="month-btn" class="month-btn">
+                <span class="ico gold"><i data-lucide="calendar"></i></span>
+                <span id="month-label">—</span>
+                <span class="ico mute"><i data-lucide="chevron-down"></i></span>
+              </button>
+              <div id="month-menu" class="month-menu is-hidden"></div>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <button id="header-action2" class="btn btn-secondary is-hidden"></button>
+            <button id="header-action" class="btn btn-primary is-hidden"></button>
+            <span class="ico mute"><i data-lucide="bell"></i></span>
+            <div id="header-email" class="topbar-email mono"></div>
+          </div>
+        </header>
+
+        <div id="view" class="view gscroll"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODAL ============ -->
+  <div id="modal-root" class="modal-overlay is-hidden"></div>
+
+  <!-- ============ TOAST ============ -->
+  <div id="toast" class="gv-toast is-hidden"></div>
+
+  <!-- Loader global -->
+  <div id="loader" class="loader-overlay is-hidden"><div class="spinner-block"></div></div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/demo.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
