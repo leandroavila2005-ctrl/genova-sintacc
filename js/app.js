@@ -130,10 +130,13 @@
         '<span class="ico"><i data-lucide="' + n.icon + '"></i></span><span>' + n.label + '</span></div>';
     }).join('');
     Array.prototype.forEach.call($('side-nav').querySelectorAll('.nav-link'), function (el) {
-      el.addEventListener('click', function () { setRoute(el.getAttribute('data-route')); });
+      el.addEventListener('click', function () { setRoute(el.getAttribute('data-route')); closeNav(); });
     });
+    var tog = $('nav-toggle'); if (tog) tog.onclick = function () { document.querySelector('.app-root').classList.toggle('nav-open'); };
+    var bd = $('nav-backdrop'); if (bd) bd.onclick = closeNav;
     drawIcons();
   }
+  function closeNav() { var r = document.querySelector('.app-root'); if (r) r.classList.remove('nav-open'); }
 
   function setRoute(route) {
     state.route = route;
