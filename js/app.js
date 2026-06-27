@@ -163,7 +163,7 @@
     }
     if (cfg) {
       ha.classList.remove('is-hidden');
-      ha.innerHTML = '<span class="ico"><i data-lucide="' + cfg.icon + '"></i></span>' + cfg.label;
+      ha.innerHTML = '<span class="ico"><i data-lucide="' + cfg.icon + '"></i></span><span class="btn-label">' + cfg.label + '</span>';
       ha.onclick = cfg.fn;
     } else {
       ha.classList.add('is-hidden');
@@ -172,7 +172,7 @@
     var ha2 = $('header-action2');
     if (route === 'mp') {
       ha2.classList.remove('is-hidden');
-      ha2.innerHTML = '<span class="ico"><i data-lucide="calculator"></i></span>Saldos Finales';
+      ha2.innerHTML = '<span class="ico"><i data-lucide="calculator"></i></span><span class="btn-label">Saldos Finales</span>';
       ha2.onclick = function () { openSaldosModal(state.mpprod.tab); };
     } else {
       ha2.classList.add('is-hidden');

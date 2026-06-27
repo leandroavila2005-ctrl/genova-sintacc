@@ -465,11 +465,28 @@
   .app-root.nav-open .sidebar { transform: translateX(0); }
   .nav-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .app-root.nav-open .nav-backdrop { opacity: 1; pointer-events: auto; }
-  .topbar { padding: 0 14px; }
+  .topbar { padding: 0 12px; }
   .topbar-email { display: none; }
-  .topbar-left { gap: 12px; }
+  .topbar-right .ico { display: none; }            /* campana decorativa */
+  .topbar-left { gap: 10px; min-width: 0; }
+  .topbar-right { gap: 8px; }
+  .topbar-title { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .btn-label { display: none; }            /* botones de acción: solo ícono */
+  .topbar .btn { padding: 9px 11px; }
+  .month-btn { padding: 7px 9px; white-space: nowrap; }
+  #month-label { font-size: 12.5px; }
+  /* Dashboard: apilar todo en una columna */
+  .dash-toprow { flex-direction: column; }
+  .kpi-mini-grid { grid-template-columns: repeat(2, 1fr); }
+  .dash-charts { grid-template-columns: 1fr; }
+  .dash-bottom { grid-template-columns: 1fr; }
+  /* Buscadores ocupan la fila completa */
+  .filters .search-box { flex: 1 1 100%; }
   .view { padding: 16px 14px; }
   .config-layout { flex-direction: column; }
   .config-side { width: auto; border-right: none; border-bottom: 1px solid var(--input-border); padding-right: 0; padding-bottom: 12px; margin-bottom: 12px; flex-direction: row; flex-wrap: wrap; }
   .config-main { padding-left: 0; }
+  /* Formularios del modal: una columna por campo (carga cómoda en celular) */
+  .gv-modal-body { padding: 18px; }
+  .form-grid.g-2, .form-grid.g-3 { grid-template-columns: 1fr; }
 }
