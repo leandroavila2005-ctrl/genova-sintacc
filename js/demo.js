@@ -74,7 +74,7 @@
   // ---- listas maestras ----
   [['La Plata Centro', 'Minorista', 'Vigente'], ['Dist. Norte SA', 'Mayorista', 'Vigente'], ['Rest. Da Vinci', 'Mayorista', 'Vigente'], ['Almacén Güemes', 'Mayorista', 'Vigente'], ['Tienda Online', 'Online', 'Vigente']]
     .forEach(function (a) { db.Listas.push({ 'Nombre': a[0], 'Categoría': a[1], 'Vigencia': a[2] }); });
-  [['MP-001', 'Harina premezcla sin TACC', 'Harinas', 'No'], ['MP-002', 'Fécula de mandioca', 'Harinas', 'No'], ['MP-003', 'Huevos', 'Frescos', 'No'], ['MP-004', 'Queso muzzarella', 'Frescos', 'Sí'], ['MP-005', 'Aceite de girasol', 'Insumos', 'No']]
+  [['MPS-0001', 'Harina premezcla sin TACC', 'Secos', 'No'], ['MPS-0002', 'Fécula de mandioca', 'Secos', 'No'], ['MPR-0001', 'Huevos', 'Refrigerados', 'No'], ['MPR-0002', 'Queso muzzarella', 'Refrigerados', 'Sí'], ['MPI-0001', 'Aceite de girasol', 'Insumos', 'No']]
     .forEach(function (a) { db.ListaMP.push({ 'Código': a[0], 'Nombre': a[1], 'Categoría': a[2], 'Es producto': a[3] }); });
   [['Rellenas', 'Ravioles', 'Ravioles ricota y verdura', 'Plancha', 4200], ['Rellenas', 'Sorrentinos', 'Sorrentinos jamón y queso', 'Plancha', 4800], ['Ñoquis', 'Ñoquis', 'Ñoquis de papa', 'Bandeja', 3500], ['Secas', 'Tallarines', 'Tallarín al huevo', 'Paquete', 2800], ['Rellenas', 'Capeletti', 'Capeletti de carne', 'Plancha', 4500]]
     .forEach(function (a) { db.ListaProd.push({ 'Categoría': a[0], 'Artículo': a[1], 'Producto': a[2], 'Modelo de loteo': a[3], 'Precio': a[4] }); });

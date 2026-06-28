@@ -1350,26 +1350,46 @@
     });
   }
 
+  // Insumos: categorías fijas y prefijo de código autogenerado.
+  var MP_CATS = ['Secos', 'Refrigerados', 'Insumos', 'Otros'];
+  var MP_CODE_PREFIX = { 'Secos': 'MPS', 'Refrigerados': 'MPR', 'Insumos': 'MPI', 'Otros': 'MPO' };
+  function nextInsumoCode(cat) {
+    var prefix = MP_CODE_PREFIX[cat] || 'MPO';
+    var re = new RegExp('^' + prefix + '-(\\d+)$'), max = 0;
+    insumosLista().forEach(function (i) {
+      var m = String(i['Código'] || '').match(re);
+      if (m) { var n = parseInt(m[1], 10); if (n > max) max = n; }
+    });
+    return prefix + '-' + ('000' + (max + 1)).slice(-4);
+  }
+
   function openCfgModal(sec, row) {
     var ed = !!row;
-    var body = sec.cols.map(function (col, i) {
-      var val = ed ? (row[col] || '') : '';
-      if (col === 'Rol') return '<div style="margin-bottom:16px;"><div class="fld-label">Rol</div>' + optGroupHtml('cfg-' + i, ['admin', 'socio'], val || 'socio') + '</div>';
-      if (col === 'Aplica IVA') return '<div style="margin-bottom:16px;"><div class="fld-label">Aplica IVA</div>' + optGroupHtml('cfg-' + i, ['Sí', 'No'], val || 'No') + '</div>';
-      if (col === 'Clasificación') {
-        var opciones = (val && CLASIF_FIJAS.indexOf(val) < 0) ? [val].concat(CLASIF_FIJAS) : CLASIF_FIJAS;
-        var optsHtml = opciones.map(function (o) { return '<option value="' + escapeHtml(o) + '"' + (o === val ? ' selected' : '') + '>' + escapeHtml(o) + '</option>'; }).join('');
-        return '<div style="margin-bottom:16px;">' + fld(col, '<select id="cfg-' + i + '" class="fld-input fld-select">' + optsHtml + '</select>') + '</div>';
-      }
-      var type = col === 'Email' ? ' mono' : '';
-      return '<div style="margin-bottom:16px;">' + fld(col, '<input id="cfg-' + i + '" class="fld-input' + type + '" placeholder="' + escapeHtml(col) + '" value="' + escapeHtml(val) + '"><div class="fld-err" id="ecfg-' + i + '"></div>') + '</div>';
-    }).join('');
-
+    var body;
     if (sec.key === 'mp') {
+      var curCat = (ed && row['Categoría']) || MP_CATS[0];
+      var cats = (curCat && MP_CATS.indexOf(curCat) < 0) ? [curCat].concat(MP_CATS) : MP_CATS;
       var onP = ed && ivaTrue(row['Es producto']);
-      body += '<div class="iva-box' + (onP ? ' is-on' : '') + '" id="cfg-esprod" style="margin-bottom:4px;">' +
-        '<span class="iva-mark"><span class="ico"><i data-lucide="check"></i></span></span>Es también producto</div>' +
-        '<div style="font-size:11px; color:var(--color-text-3); margin-bottom:8px;">Al comprarlo se sumará también a Producción (artículo «compras», solo cantidad).</div>';
+      body =
+        '<div style="margin-bottom:16px;"><div class="fld-label">Categoría</div>' + optGroupHtml('cfg-cat', cats, curCat) + '</div>' +
+        '<div style="margin-bottom:16px;">' + fld('Nombre', '<input id="cfg-nombre" class="fld-input" placeholder="Nombre del insumo" value="' + escapeHtml(ed ? (row['Nombre'] || '') : '') + '"><div class="fld-err" id="ecfg-nombre"></div>') + '</div>' +
+        (ed && row['Código'] ? '<div style="margin-bottom:16px;"><div class="fld-label">Código</div><div class="fld-input mono" style="background:var(--row-hover); color:var(--color-text-2); display:flex; align-items:center;">' + escapeHtml(row['Código']) + '</div></div>' : '') +
+        '<div class="iva-box' + (onP ? ' is-on' : '') + '" id="cfg-esprod" style="margin-bottom:4px;">' +
+          '<span class="iva-mark"><span class="ico"><i data-lucide="check"></i></span></span>Es también producto</div>' +
+        '<div style="font-size:11px; color:var(--color-text-3); margin-bottom:8px;">El código se asigna automático según la categoría (Secos MPS, Refrigerados MPR, Insumos MPI, Otros MPO). Al marcarlo «también producto», la compra se suma a Producción.</div>';
+    } else {
+      body = sec.cols.map(function (col, i) {
+        var val = ed ? (row[col] || '') : '';
+        if (col === 'Rol') return '<div style="margin-bottom:16px;"><div class="fld-label">Rol</div>' + optGroupHtml('cfg-' + i, ['admin', 'socio'], val || 'socio') + '</div>';
+        if (col === 'Aplica IVA') return '<div style="margin-bottom:16px;"><div class="fld-label">Aplica IVA</div>' + optGroupHtml('cfg-' + i, ['Sí', 'No'], val || 'No') + '</div>';
+        if (col === 'Clasificación') {
+          var opciones = (val && CLASIF_FIJAS.indexOf(val) < 0) ? [val].concat(CLASIF_FIJAS) : CLASIF_FIJAS;
+          var optsHtml = opciones.map(function (o) { return '<option value="' + escapeHtml(o) + '"' + (o === val ? ' selected' : '') + '>' + escapeHtml(o) + '</option>'; }).join('');
+          return '<div style="margin-bottom:16px;">' + fld(col, '<select id="cfg-' + i + '" class="fld-input fld-select">' + optsHtml + '</select>') + '</div>';
+        }
+        var type = col === 'Email' ? ' mono' : '';
+        return '<div style="margin-bottom:16px;">' + fld(col, '<input id="cfg-' + i + '" class="fld-input' + type + '" placeholder="' + escapeHtml(col) + '" value="' + escapeHtml(val) + '"><div class="fld-err" id="ecfg-' + i + '"></div>') + '</div>';
+      }).join('');
     }
 
     openModal({
@@ -1383,6 +1403,21 @@
   }
 
   function saveCfg(btn, sec, rowNum) {
+    if (sec.key === 'mp') {
+      var cat = optGroupVal('cfg-cat');
+      var nombre = $('cfg-nombre').value.trim();
+      if (!nombre) { fieldError('cfg-nombre', 'ecfg-nombre', 'Nombre obligatorio'); return; }
+      fieldOk('cfg-nombre', 'ecfg-nombre');
+      var existing = rowNum ? (cfgRows(sec).filter(function (r) { return r._row === rowNum; })[0] || {}) : {};
+      var codigo = (existing['Código'] && String(existing['Código']).trim()) ? existing['Código'] : nextInsumoCode(cat);
+      var recMp = { 'Código': codigo, 'Nombre': nombre, 'Categoría': cat, 'Es producto': $('cfg-esprod').classList.contains('is-on') ? 'Sí' : 'No' };
+      setBtnLoading(btn, true, rowNum ? 'Guardar cambios' : 'Guardar');
+      var opMp = rowNum ? Api.update(sec.sheet, rowNum, recMp) : Api.create(sec.sheet, recMp);
+      opMp.then(function () { return reloadLists(); }).then(function () {
+        closeModal(); toast(rowNum ? 'Insumo actualizado' : 'Insumo agregado · ' + codigo);
+      }).catch(function (err) { setBtnLoading(btn, false); toast(err.message, true); });
+      return;
+    }
     var record = {}, ok = true;
     sec.cols.forEach(function (col, i) {
       var val;
@@ -1390,7 +1425,6 @@
       else val = $('cfg-' + i).value.trim();
       record[col] = val;
     });
-    if (sec.key === 'mp') record['Es producto'] = $('cfg-esprod').classList.contains('is-on') ? 'Sí' : 'No';
     // validación: primera columna obligatoria; email válido para Usuarios
     var firstCol = sec.cols[0];
     if (sec.key === 'users') {
