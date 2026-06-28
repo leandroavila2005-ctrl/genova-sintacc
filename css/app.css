@@ -467,7 +467,7 @@
   .app-root.nav-open .nav-backdrop { opacity: 1; pointer-events: auto; }
   .topbar { padding: 0 12px; }
   .topbar-email { display: none; }
-  .topbar-right .ico { display: none; }            /* campana decorativa */
+  .topbar-right > .ico { display: none; }          /* solo la campana (hijo directo), no el ícono de los botones */
   .topbar-left { gap: 10px; min-width: 0; }
   .topbar-right { gap: 8px; }
   .topbar-title { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
