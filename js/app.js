@@ -26,11 +26,12 @@
   var NAV = [
     { key: 'dashboard',   label: 'Dashboard',       icon: 'layout-dashboard' },
     { key: 'ventas',      label: 'Ventas',          icon: 'receipt-text' },
+    { key: 'precios',     label: 'Precios',         icon: 'tag' },
     { key: 'movimientos', label: 'Movimientos',     icon: 'arrow-left-right' },
     { key: 'mp',          label: 'MP y Producción', icon: 'package' },
     { key: 'config',      label: 'Configuración',   icon: 'settings' }
   ];
-  var TITLES = { dashboard:'Dashboard', ventas:'Ventas', movimientos:'Movimientos', mp:'MP y Producción', config:'Configuración' };
+  var TITLES = { dashboard:'Dashboard', ventas:'Ventas', precios:'Precios', movimientos:'Movimientos', mp:'MP y Producción', config:'Configuración' };
 
   /* ----------------------------- helpers ----------------------------- */
   function $(id) { return document.getElementById(id); }
@@ -144,7 +145,7 @@
       el.classList.toggle('is-active', el.getAttribute('data-route') === route);
     });
     $('header-title').textContent = TITLES[route] || '';
-    $('month-picker').classList.toggle('is-hidden', route === 'config'); // config muestra listas fijas, no depende del período
+    $('month-picker').classList.toggle('is-hidden', route === 'config' || route === 'precios'); // catálogos: no dependen del período
     $('header-action').classList.add('is-hidden'); // se activa por vista cuando corresponda
     $('header-action2').classList.add('is-hidden');
     renderRoute();
@@ -184,12 +185,55 @@
     applyHeaderAction(state.route);
     if (state.route === 'dashboard') return renderDashboard();
     if (state.route === 'ventas') return ensureVentas();
+    if (state.route === 'precios') return renderPrecios();
     if (state.route === 'movimientos') return ensureMov();
     if (state.route === 'mp') return ensureMpProd();
     if (state.route === 'config') return renderConfig();
     $('view').innerHTML = '<div class="placeholder"><span class="ico"><i data-lucide="hammer"></i></span>' +
       '<div>Vista «' + escapeHtml(TITLES[state.route]) + '» en construcción.</div></div>';
     drawIcons();
+  }
+
+  function renderPrecios() {
+    var rows = productosLista();
+    var admin = isAdmin();
+    var body;
+    if (!rows.length) {
+      body = emptyHtml('tag', 'Sin productos', 'Cargá productos en Configuración → Productos terminados.');
+    } else {
+      var note = admin
+        ? '<div class="cfg-sub" style="margin-bottom:14px;">Editá el precio de cada producto; se guarda al salir del campo.</div>'
+        : '<div class="notice notice-info" style="margin-bottom:14px;"><span class="ico" style="width:16px;height:16px;"><i data-lucide="lock-keyhole"></i></span>Sólo un administrador puede editar los precios.</div>';
+      var head = '<div class="dt-head"><div>Categoría</div><div>Artículo</div><div>Producto</div><div class="r-right">Precio</div></div>';
+      var trs = rows.map(function (r) {
+        var precioCell = admin
+          ? '<input class="fld-input mono precio-input" data-row="' + r._row + '" inputmode="decimal" value="' + escapeHtml(r['Precio'] == null ? '' : String(r['Precio'])) + '">'
+          : '<span class="num strong">' + (r['Precio'] ? money(r['Precio']) : '—') + '</span>';
+        return '<div class="dt-row">' +
+          '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
+          '<div style="font-weight:500;">' + escapeHtml(r['Artículo'] || '') + '</div>' +
+          '<div>' + escapeHtml(r['Producto'] || '') + '</div>' +
+          '<div class="r-right">' + precioCell + '</div>' +
+          '</div>';
+      }).join('');
+      body = note + '<div class="data-table tbl-precios">' + head + trs + '</div>';
+    }
+    $('view').innerHTML = body;
+    if (admin) {
+      Array.prototype.forEach.call($('view').querySelectorAll('.precio-input'), function (el) {
+        el.addEventListener('change', function () { savePrecio(Number(el.getAttribute('data-row')), el.value); });
+      });
+    }
+    drawIcons();
+  }
+
+  function savePrecio(rowNum, raw) {
+    var precio = toNum(raw);
+    Api.update('ListaProd', rowNum, { 'Precio': precio }).then(function () {
+      var p = productosLista().filter(function (r) { return r._row === rowNum; })[0];
+      if (p) p['Precio'] = precio;
+      toast('Precio actualizado');
+    }).catch(function (err) { toast(err.message, true); });
   }
 
   function loadingView() {
@@ -1213,7 +1257,7 @@
   /* ----------------------------- configuración ----------------------------- */
   var CFG_SECTIONS = [
     { key: 'mp',    label: 'Materias primas',      icon: 'wheat-off',       sheet: 'ListaMP',   listKey: 'insumos',   cols: ['Código', 'Nombre', 'Categoría'],            sub: 'Lista maestra de insumos',   add: 'Agregar insumo' },
-    { key: 'prod',  label: 'Productos terminados', icon: 'utensils',        sheet: 'ListaProd', listKey: 'productos',  cols: ['Categoría', 'Artículo', 'Producto'],         sub: 'Catálogo de pastas',         add: 'Agregar producto' },
+    { key: 'prod',  label: 'Productos terminados', icon: 'utensils',        sheet: 'ListaProd', listKey: 'productos',  cols: ['Categoría', 'Artículo', 'Producto', 'Modelo de loteo', 'Precio'], sub: 'Catálogo de pastas', add: 'Agregar producto' },
     { key: 'mov',   label: 'Tipos de movimiento',  icon: 'arrow-left-right', sheet: 'Glosario',  listKey: 'glosario',   cols: ['Concepto', 'Clasificación', 'Aplica IVA'],   sub: 'Clasificaciones de gasto',   add: 'Agregar tipo' },
     { key: 'cli',   label: 'Clientes y canales',   icon: 'store',           sheet: 'Listas',    listKey: 'canales',    cols: ['Nombre', 'Categoría', 'Vigencia'],           sub: 'Cuentas y canales de venta', add: 'Agregar cliente' },
     { key: 'users', label: 'Usuarios autorizados', icon: 'users',           sheet: 'Usuarios',  listKey: 'usuarios',   cols: ['Email', 'Rol'],                              sub: 'Cuentas con acceso a la app', add: 'Invitar usuario' }
@@ -1257,17 +1301,23 @@
   function cfgListTable(sec) {
     var rows = cfgRows(sec);
     if (rows.length === 0) return emptyHtml(sec.icon, 'Lista vacía', isAdmin() ? 'Agregá el primer registro.' : 'Todavía no hay registros.');
-    var head = '<div class="dt-head"><div>' + sec.cols[0] + '</div><div>' + sec.cols[1] + '</div><div>' + sec.cols[2] + '</div><div></div></div>';
+    var cols = sec.cols;
+    var head = '<div class="dt-head">' + cols.map(function (c) { return '<div>' + escapeHtml(c) + '</div>'; }).join('') + '<div></div></div>';
     var trs = rows.map(function (r) {
-      var c0 = sec.cols[0] === 'Código' ? '<div class="cfg-cell-code">' + escapeHtml(r[sec.cols[0]] || '') + '</div>' : '<div class="muted">' + escapeHtml(r[sec.cols[0]] || '') + '</div>';
-      var tagProd = (sec.key === 'mp' && ivaTrue(r['Es producto']))
-        ? ' <span class="badge badge-sm badge-online" style="margin-left:6px;">también producto</span>' : '';
-      return '<div class="dt-row">' + c0 +
-        '<div style="font-weight:500;">' + escapeHtml(r[sec.cols[1]] || '') + tagProd + '</div>' +
-        '<div><span class="badge badge-sm badge-neutral">' + escapeHtml(r[sec.cols[2]] || '—') + '</span></div>' +
-        (isAdmin() ? rowActionsHtml(r._row) : '<div></div>') + '</div>';
+      var cells = cols.map(function (c, i) {
+        var val = r[c];
+        if (c === 'Código') return '<div class="cfg-cell-code">' + escapeHtml(val || '') + '</div>';
+        if (i === 0) return '<div class="muted">' + escapeHtml(val || '') + '</div>';
+        if (i === 1) {
+          var tagProd = (sec.key === 'mp' && ivaTrue(r['Es producto']))
+            ? ' <span class="badge badge-sm badge-online" style="margin-left:6px;">también producto</span>' : '';
+          return '<div style="font-weight:500;">' + escapeHtml(val || '') + tagProd + '</div>';
+        }
+        return '<div><span class="badge badge-sm badge-neutral">' + escapeHtml(val || '—') + '</span></div>';
+      }).join('');
+      return '<div class="dt-row">' + cells + (isAdmin() ? rowActionsHtml(r._row) : '<div></div>') + '</div>';
     }).join('');
-    return '<div class="data-table cfg-list">' + head + trs + '</div>';
+    return '<div class="data-table cfg-list cfg-cols-' + cols.length + '">' + head + trs + '</div>';
   }
 
   function cfgUsersTable(sec) {
