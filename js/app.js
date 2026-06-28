@@ -1081,7 +1081,10 @@
         '<div class="date" style="font-size:12px;">' + isoToShort(r['Fecha']) + '</div>' +
         '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
         '<div style="font-weight:500;">' + escapeHtml(r['Artículo'] || '') + '</div>' +
-        '<div>' + escapeHtml(r['Producto'] || '') + '</div>' +
+        '<div>' + escapeHtml(r['Producto'] || '') +
+          (([r['Lote'] && ('Lote ' + r['Lote']), r['Fecha Vto'] && ('Vto ' + r['Fecha Vto'])].filter(Boolean).join(' · '))
+            ? '<div class="muted" style="font-size:11px;">' + escapeHtml([r['Lote'] && ('Lote ' + r['Lote']), r['Fecha Vto'] && ('Vto ' + r['Fecha Vto'])].filter(Boolean).join(' · ')) + '</div>' : '') +
+        '</div>' +
         '<div class="num strong">' + num(r['Unidades']) + '</div>' +
         '<div class="text-3" style="font-size:12px;">' + escapeHtml(r['OBS1'] || '—') + '</div>' +
         '<div class="num muted">' + escapeHtml(String(r['Descuento'] == null ? '' : r['Descuento'])) + '</div>' +
@@ -1195,9 +1198,10 @@
         fld('Fecha', '<input id="f-fecha" class="fld-input" placeholder="14/03 o 14/03/2026" value="' + escapeHtml(ed ? isoToInput(row['Fecha']) : '') + '"><div class="fld-err" id="e-fecha"></div>') +
         fld('Producto', '<input id="f-producto" class="fld-input" list="dl-prod" placeholder="Ravioles ricota y verdura" value="' + escapeHtml(ed ? (row['Producto'] || '') : '') + '">' + dlP + '<div class="fld-err" id="e-producto"></div>') +
       '</div>' +
-      '<div class="form-grid g-2" style="margin-bottom:16px;">' +
+      '<div class="form-grid g-3" style="margin-bottom:16px;">' +
         fld('Unidades', moneyInput('f-uds', row && row['Unidades']) + '<div class="fld-err" id="e-uds"></div>') +
         fld('Descuento', '<input id="f-desc" class="fld-input mono" placeholder="0%" value="' + escapeHtml(ed ? (row['Descuento'] || '') : '') + '">') +
+        fld('Fecha Vto', '<input id="f-pvto" class="fld-input" placeholder="DD/MM/AAAA" value="' + escapeHtml(ed ? (row['Fecha Vto'] || '') : '') + '">') +
       '</div>' +
       fld('Observación', '<input id="f-obs" class="fld-input" placeholder="Detalle (opcional)" value="' + escapeHtml(ed ? (row['OBS1'] || '') : '') + '">');
     openModal({
@@ -1221,9 +1225,12 @@
     var match = productosLista().filter(function (p) { return p['Producto'] === producto; })[0];
     var articulo = match ? (match['Artículo'] || producto) : producto;
     var categoria = match ? (match['Categoría'] || '') : '';
+    var modelo = match ? (match['Modelo de loteo'] || '') : '';
+    var lote = (modelo ? modelo + '-' : '') + fechaN.replace(/\//g, ''); // ej FC-14032026
     var record = {
       'Fecha': fechaN, 'Categoría': categoria, 'Artículo': articulo, 'Producto': producto,
-      'Unidades': uds, 'OBS1': $('f-obs').value.trim(), 'Descuento': $('f-desc').value.trim()
+      'Unidades': uds, 'OBS1': $('f-obs').value.trim(), 'Descuento': $('f-desc').value.trim(),
+      'Lote': lote, 'Fecha Vto': $('f-pvto').value.trim()
     };
     setBtnLoading(btn, true, rowNum ? 'Guardar cambios' : 'Guardar producción');
     var op = rowNum ? Api.update('PROD', rowNum, record) : Api.create('PROD', record);
@@ -1340,7 +1347,7 @@
   /* ----------------------------- configuración ----------------------------- */
   var CFG_SECTIONS = [
     { key: 'mp',    label: 'Materias primas',      icon: 'wheat-off',       sheet: 'ListaMP',   listKey: 'insumos',   cols: ['Código', 'Nombre', 'Categoría'],            sub: 'Lista maestra de insumos',   add: 'Agregar insumo' },
-    { key: 'prod',  label: 'Productos terminados', icon: 'utensils',        sheet: 'ListaProd', listKey: 'productos',  cols: ['Categoría', 'Artículo', 'Producto', 'Modelo de loteo', 'Precio'], sub: 'Catálogo de pastas', add: 'Agregar producto' },
+    { key: 'prod',  label: 'Productos terminados', icon: 'utensils',        sheet: 'ListaProd', listKey: 'productos',  cols: ['Categoría', 'Artículo', 'Producto', 'Modelo de loteo', 'Kg por envase', 'Precio'], sub: 'Catálogo de pastas', add: 'Agregar producto' },
     { key: 'mov',   label: 'Tipos de movimiento',  icon: 'arrow-left-right', sheet: 'Glosario',  listKey: 'glosario',   cols: ['Concepto', 'Clasificación', 'Aplica IVA'],   sub: 'Clasificaciones de gasto',   add: 'Agregar tipo' },
     { key: 'cli',   label: 'Clientes y canales',   icon: 'store',           sheet: 'Listas',    listKey: 'canales',    cols: ['Nombre', 'Categoría', 'Vigencia'],           sub: 'Cuentas y canales de venta', add: 'Agregar cliente' },
     { key: 'users', label: 'Usuarios autorizados', icon: 'users',           sheet: 'Usuarios',  listKey: 'usuarios',   cols: ['Email', 'Rol'],                              sub: 'Cuentas con acceso a la app', add: 'Invitar usuario' }

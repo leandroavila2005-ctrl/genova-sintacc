@@ -426,6 +426,7 @@
 .cfg-cols-3 .dt-head, .cfg-cols-3 .dt-row { grid-template-columns: 1fr 1.6fr 1fr 72px; }
 .cfg-cols-4 .dt-head, .cfg-cols-4 .dt-row { grid-template-columns: 1fr 1.3fr 1.3fr 1fr 72px; }
 .cfg-cols-5 .dt-head, .cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 72px; }
+.cfg-cols-6 .dt-head, .cfg-cols-6 .dt-row { grid-template-columns: 0.9fr 1fr 1.3fr 1fr 0.9fr 0.9fr 72px; }
 .tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 1fr 1.2fr 1.4fr 120px; }
 .precio-input { text-align: right; padding: 7px 9px; height: auto; }
 .cfg-users .dt-head, .cfg-users .dt-row { grid-template-columns: 1.6fr 150px 72px; }
