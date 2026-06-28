@@ -948,14 +948,16 @@
       '<button class="tab-seg' + (!isMp ? ' is-active' : '') + '" data-tab="prod">Producción</button></div>';
     var q = isMp ? state.mpprod.mp.query : state.mpprod.prod.query;
     var ph = isMp ? 'Buscar insumo…' : 'Buscar artículo o producto…';
+    var poeBtn = isMp ? '<button class="btn btn-secondary" id="mp-poe" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>POE</button>' : '';
     var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
       '<span class="ico"><i data-lucide="search"></i></span>' +
-      '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div></div>';
+      '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div>' + poeBtn + '</div>';
     $('view').innerHTML = tabs + search + (isMp ? mpTableHtml() : prodTableHtml());
 
     Array.prototype.forEach.call($('view').querySelectorAll('[data-tab]'), function (el) {
       el.addEventListener('click', function () { switchMpTab(el.getAttribute('data-tab')); });
     });
+    var poe = $('mp-poe'); if (poe) poe.onclick = pdfPOE;
     var s = $('mp-search');
     if (s) s.addEventListener('input', function () {
       if (isMp) state.mpprod.mp.query = s.value; else state.mpprod.prod.query = s.value;
@@ -964,6 +966,73 @@
     });
     wireRowActions(isMp ? 'mp' : 'prod');
     drawIcons();
+  }
+
+  // PDF imprimible de recepción de materias primas (POE), por categoría, del mes seleccionado.
+  function pdfPOE() {
+    var rows = (state.mpprod.mp.rows || []).filter(function (r) { return inPeriod(r['Fecha']); });
+    var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
+    var grupos = [
+      { titulo: 'POE - Recepción de Materias Primas (SECOS)', prefix: 'MPS' },
+      { titulo: 'POE - Recepción de Materias Primas (REFRIGERADOS)', prefix: 'MPR' },
+      { titulo: 'POE - Recepción de Materias Primas (INSUMOS)', prefix: 'MPI' }
+    ];
+    var esc = escapeHtml;
+    var sections = grupos.map(function (g) {
+      var gr = rows.filter(function (r) { return String(r['ID insumo'] || '').indexOf(g.prefix + '-') === 0; })
+        .sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
+      var body = gr.length
+        ? gr.map(function (r) {
+            return '<tr>' +
+              '<td>' + esc(isoToShort(r['Fecha'])) + '</td>' +
+              '<td>' + esc(r['Nombre'] || '') + '</td>' +
+              '<td>' + esc(r['Proveedor'] || '') + '</td>' +
+              '<td class="num">' + esc(String(r['Cantidad'] == null ? '' : r['Cantidad'])) + '</td>' +
+              '<td>' + esc(r['Lote'] || '') + '</td>' +
+              '<td>' + esc(r['Fecha Vto'] || '') + '</td>' +
+              '<td></td></tr>';
+          }).join('')
+        : '<tr><td colspan="7" class="empty">Sin recepciones en el período.</td></tr>';
+      return '<section class="poe"><h2>' + esc(g.titulo) + '</h2>' +
+        '<table><thead><tr><th>Fecha</th><th>Producto</th><th>Proveedor</th><th class="num">Cantidad</th><th>Lote</th><th>Fecha Vto</th><th>Observaciones</th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table></section>';
+    }).join('');
+
+    var html =
+      '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">' +
+      '<title>POE Recepción MP · ' + esc(mesNom) + ' ' + anio + '</title>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Spectral:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">' +
+      '<style>' +
+      '*{box-sizing:border-box;} body{font-family:"Public Sans",sans-serif;color:#211E1C;background:#fff;margin:0;padding:26px 24px 64px;}' +
+      '.doc-head{border-bottom:3px solid #C8102E;padding-bottom:10px;margin-bottom:18px;}' +
+      '.doc-head .brand{font-family:"Libre Caslon Display",serif;font-size:23px;color:#1C1A19;}' +
+      '.doc-head .brand b{color:#C8102E;font-weight:400;}' +
+      '.doc-head .sub{font-size:12px;color:#6B655E;margin-top:3px;}' +
+      'section.poe{margin-bottom:22px;page-break-inside:avoid;}' +
+      'section.poe h2{font-family:"Spectral",serif;font-size:13.5px;color:#fff;background:#1C1A19;padding:8px 12px;border-left:5px solid #E8B84B;margin:0;}' +
+      'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+      'thead th{background:#F6F0E6;color:#1C1A19;text-align:left;padding:7px 8px;border:1px solid #E2D9C7;font-weight:600;}' +
+      'tbody td{padding:6px 8px;border:1px solid #E2D9C7;vertical-align:top;}' +
+      'th.num,td.num{text-align:right;font-variant-numeric:tabular-nums;}' +
+      'td.empty{text-align:center;color:#A89F8C;font-style:italic;}' +
+      '.poe-foot{position:fixed;bottom:0;left:0;right:0;height:46px;border-top:1px solid #E2D9C7;padding:0 24px;font-size:10.5px;color:#6B655E;display:flex;justify-content:space-between;align-items:center;background:#fff;}' +
+      '.poe-foot .gold{color:#B98A1E;font-weight:600;}' +
+      '.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;}' +
+      '.toolbar button{font-family:inherit;font-size:13px;font-weight:600;border:none;border-radius:8px;padding:9px 16px;background:#C8102E;color:#fff;cursor:pointer;}' +
+      '@page{size:A4;margin:14mm 10mm 18mm;}' +
+      '@media print{.noprint{display:none;}body{padding-top:6px;}}' +
+      '</style></head><body>' +
+      '<div class="noprint toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>' +
+      '<div class="doc-head"><div class="brand">Génova <b>Sin TACC</b></div>' +
+      '<div class="sub">Recepción de Materias Primas · ' + esc(mesNom) + ' ' + anio + '</div></div>' +
+      sections +
+      '<div class="poe-foot"><span>Génova Sin TACC</span><span class="gold">' + esc(mesNom) + ' ' + anio + '</span></div>' +
+      '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},500);});<\/script>' +
+      '</body></html>';
+
+    var w = window.open('', '_blank');
+    if (!w) { toast('Permití las ventanas emergentes para generar el PDF', true); return; }
+    w.document.open(); w.document.write(html); w.document.close();
   }
 
   function mpTableHtml() {
