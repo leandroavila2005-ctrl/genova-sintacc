@@ -977,7 +977,11 @@
     var trs = rows.map(function (r) {
       return '<div class="dt-row">' +
         '<div class="date">' + isoToShort(r['Fecha']) + '</div>' +
-        '<div style="font-weight:500;">' + escapeHtml(r['Nombre']) + '</div>' +
+        '<div>' +
+          '<div style="font-weight:500;"><span class="mono" style="color:var(--color-accent-700);">' + escapeHtml(r['ID insumo'] || '—') + '</span> ' + escapeHtml(r['Nombre'] || '') + '</div>' +
+          (([r['Proveedor'], r['Lote'] && ('Lote ' + r['Lote'])].filter(Boolean).join(' · '))
+            ? '<div class="muted" style="font-size:11.5px;">' + escapeHtml([r['Proveedor'], r['Lote'] && ('Lote ' + r['Lote'])].filter(Boolean).join(' · ')) + '</div>' : '') +
+        '</div>' +
         '<div class="num muted">' + escapeHtml(String(r['Cantidad'] == null ? '' : r['Cantidad'])) + '</div>' +
         '<div class="num muted">' + money(r['Precio unitario']) + '</div>' +
         '<div class="num strong">' + money(r['Total']) + '</div>' +
@@ -1058,6 +1062,14 @@
         fld('Cantidad', '<input id="f-cant" class="fld-input" placeholder="200 kg" value="' + escapeHtml(ed ? (row['Cantidad'] || '') : '') + '">') +
         fld('Precio unit.', moneyInput('f-precio', row && row['Precio unitario']) + '<div class="fld-err" id="e-precio"></div>') +
         fld('Total', '<input id="f-total" class="fld-input mono" placeholder="0" value="' + (ed ? escapeHtml(String(row['Total'] || '')) : '') + '" readonly>') +
+      '</div>' +
+      '<div class="form-grid g-2" style="margin-top:14px;">' +
+        fld('Proveedor', '<input id="f-prov" class="fld-input" placeholder="Proveedor" value="' + escapeHtml(ed ? (row['Proveedor'] || '') : '') + '">') +
+        fld('Lote', '<input id="f-lote" class="fld-input" placeholder="N° de lote" value="' + escapeHtml(ed ? (row['Lote'] || '') : '') + '">') +
+      '</div>' +
+      '<div class="form-grid g-2">' +
+        fld('Bulto cerrado', '<input id="f-bulto" class="fld-input" placeholder="Ej: caja x10" value="' + escapeHtml(ed ? (row['Bulto cerrado'] || '') : '') + '">') +
+        fld('Fecha Vto', '<input id="f-vto" class="fld-input" placeholder="DD/MM/AAAA" value="' + escapeHtml(ed ? (row['Fecha Vto'] || '') : '') + '">') +
       '</div>';
     openModal({
       title: ed ? 'Editar compra' : 'Nueva compra',
@@ -1083,7 +1095,9 @@
     var cantNum = toNum($('f-cant').value);
     var record = {
       'Fecha': fechaN, 'ID insumo': match ? (match['Código'] || '') : '', 'Nombre': insumo,
-      'Cantidad': $('f-cant').value.trim(), 'Precio unitario': precio
+      'Cantidad': $('f-cant').value.trim(), 'Precio unitario': precio,
+      'Proveedor': $('f-prov').value.trim(), 'Bulto cerrado': $('f-bulto').value.trim(),
+      'Lote': $('f-lote').value.trim(), 'Fecha Vto': $('f-vto').value.trim()
     };
     // Insumo marcado "es también producto": al comprarlo se replica en Producción (solo cantidad).
     var esProd = !rowNum && match && ivaTrue(match['Es producto']);
