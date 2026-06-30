@@ -1,6 +1,8 @@
 /**
  * Cliente del API (GAS Web App). Devuelve data o lanza Error con el mensaje del backend.
- * GET para lecturas, POST (text/plain → sin preflight CORS) para escrituras.
+ * Todo por GET: cross-origin con Apps Script, el POST termina en una redirección que el
+ * navegador recibe como HTML. El GET sí devuelve JSON de forma confiable, así que las
+ * escrituras también van por GET (el record viaja como JSON en la query; el backend lo parsea).
  */
 window.Api = (function () {
   function url() {
@@ -14,32 +16,27 @@ window.Api = (function () {
     return j.data;
   }
 
-  async function get(action, params) {
+  async function call(action, params) {
     var u = new URL(url());
     u.searchParams.set('action', action);
     u.searchParams.set('token', window.Auth.token() || '');
-    Object.keys(params || {}).forEach(function (k) { u.searchParams.set(k, params[k]); });
+    Object.keys(params || {}).forEach(function (k) {
+      var v = params[k];
+      if (v === undefined || v === null) return;
+      u.searchParams.set(k, (typeof v === 'object') ? JSON.stringify(v) : v);
+    });
+    u.searchParams.set('_', Date.now()); // anti-caché
     var res = await fetch(u.toString(), { method: 'GET' });
     return parse(await res.json());
   }
 
-  async function post(action, payload) {
-    var body = Object.assign({ action: action, token: window.Auth.token() || '' }, payload || {});
-    var res = await fetch(url(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
-    });
-    return parse(await res.json());
-  }
-
   return {
-    bootstrap: function () { return get('bootstrap'); },
-    lists:     function () { return get('lists'); },
-    list:      function (sheet) { return get('list', { sheet: sheet }); },
-    dashboard: function (anio) { return get('dashboard', { anio: anio }); },
-    create:    function (sheet, record) { return post('create', { sheet: sheet, record: record }); },
-    update:    function (sheet, row, record) { return post('update', { sheet: sheet, row: row, record: record }); },
-    remove:    function (sheet, row) { return post('delete', { sheet: sheet, row: row }); }
+    bootstrap: function () { return call('bootstrap'); },
+    lists:     function () { return call('lists'); },
+    list:      function (sheet) { return call('list', { sheet: sheet }); },
+    dashboard: function (anio) { return call('dashboard', { anio: anio }); },
+    create:    function (sheet, record) { return call('create', { sheet: sheet, record: record }); },
+    update:    function (sheet, row, record) { return call('update', { sheet: sheet, row: row, record: record }); },
+    remove:    function (sheet, row) { return call('delete', { sheet: sheet, row: row }); }
   };
 })();
