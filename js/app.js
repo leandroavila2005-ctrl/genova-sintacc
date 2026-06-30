@@ -16,7 +16,7 @@
     monthOpen: false,
     ventas: { rows: null, filter: 'Todos', query: '' },
     mov: { rows: null, filter: 'Todas', iva: 'Todos', query: '' },
-    mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' } },
+    mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' }, stockQuery: '' },
     precios: { query: '' },
     config: { section: 'mp' }
   };
@@ -1130,6 +1130,12 @@
       renderMpProd();
       var ns = $('mp-search'); if (ns) { ns.focus(); ns.setSelectionRange(ns.value.length, ns.value.length); }
     });
+    var ss = $('stock-search');
+    if (ss) ss.addEventListener('input', function () {
+      state.mpprod.stockQuery = ss.value;
+      renderMpProd();
+      var ns = $('stock-search'); if (ns) { ns.focus(); ns.setSelectionRange(ns.value.length, ns.value.length); }
+    });
     wireRowActions(isMp ? 'mp' : 'prod');
     drawIcons();
   }
@@ -1383,6 +1389,13 @@
       if (st > 0) items.push({ producto: p['Producto'], articulo: p['Artículo'] || '', lote: p['Lote'], vto: p['Fecha Vto'] || '', stock: st });
     });
     items.sort(function (a, b) { return (a.producto + a.lote).localeCompare(b.producto + b.lote); });
+    var sq = (state.mpprod.stockQuery || '').trim().toLowerCase();
+    if (sq) items = items.filter(function (it) {
+      return ((it.articulo + ' ' + it.producto + ' ' + it.lote).toLowerCase()).indexOf(sq) >= 0;
+    });
+    var sBox = '<div class="filters" style="margin-bottom:14px;"><div class="search-box">' +
+      '<span class="ico"><i data-lucide="search"></i></span>' +
+      '<input id="stock-search" placeholder="Buscar producto o lote…" value="' + escapeHtml(state.mpprod.stockQuery || '') + '"></div></div>';
     var inner;
     if (!items.length) {
       inner = emptyHtml('package', 'Sin stock', 'No hay productos con stock disponible.');
@@ -1401,7 +1414,7 @@
       inner = '<div class="data-table tbl-stock">' + head + trs + foot + '</div>';
     }
     return '<div style="margin-top:26px;"><div class="cfg-title">Stock disponible</div>' +
-      '<div class="cfg-sub" style="margin-bottom:14px;">Productos con stock de producción (fijo, sin importar el mes).</div>' + inner + '</div>';
+      '<div class="cfg-sub" style="margin-bottom:14px;">Productos con stock de producción (fijo, sin importar el mes).</div>' + sBox + inner + '</div>';
   }
 
   function mesNombre(m) { var n = Number(m); return (n >= 1 && n <= 12) ? MONTHS_SHORT[n - 1] : (m == null ? '' : String(m)); }

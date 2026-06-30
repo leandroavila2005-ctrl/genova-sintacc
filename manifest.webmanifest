@@ -1,0 +1,14 @@
+{
+  "name": "Génova Sin TACC",
+  "short_name": "Génova",
+  "description": "Gestión operativa Génova Sin TACC",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1C1A19",
+  "theme_color": "#C8102E",
+  "icons": [
+    { "src": "assets/logo-sintacc.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logo-sintacc.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
