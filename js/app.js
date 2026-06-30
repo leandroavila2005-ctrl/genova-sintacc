@@ -599,7 +599,8 @@
 
     var filters = '<div class="filters"><span class="filters-label">Canal</span>' + chips +
       '<div class="search-box"><span class="ico"><i data-lucide="search"></i></span>' +
-      '<input id="ventas-search" placeholder="Buscar cliente…" value="' + escapeHtml(state.ventas.query) + '"></div></div>';
+      '<input id="ventas-search" placeholder="Buscar cliente…" value="' + escapeHtml(state.ventas.query) + '"></div>' +
+      '<button class="btn btn-secondary" id="ventas-salida" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>Salida</button></div>';
 
     var body;
     if (view.length === 0) {
@@ -653,6 +654,7 @@
     });
     var clr = $('ventas-clear');
     if (clr) clr.addEventListener('click', function () { state.ventas.filter = 'Todos'; state.ventas.query = ''; renderVentas(); });
+    var sal = $('ventas-salida'); if (sal) sal.onclick = pdfSalida;
     Array.prototype.forEach.call(v.querySelectorAll('[data-edit]'), function (el) {
       el.addEventListener('click', function () { openVentaModal(rowByNum(el.getAttribute('data-edit'))); });
     });
@@ -1194,7 +1196,7 @@
           var kg = env * kgEnv(r['Producto']);
           return '<tr>' +
             '<td>' + esc(isoToShort(r['Fecha'])) + '</td>' +
-            '<td>' + esc(r['Producto'] || '') + '</td>' +
+            '<td>' + esc(((r['Artículo'] ? r['Artículo'] + ' ' : '') + (r['Producto'] || '')).trim()) + '</td>' +
             '<td class="num">' + (kg ? kg.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '') + '</td>' +
             '<td class="num">' + esc(env ? String(env) : '') + '</td>' +
             '<td>' + esc(r['Lote'] || '') + '</td>' +
@@ -1205,6 +1207,47 @@
       '<table><thead><tr><th>Fecha</th><th>Producto</th><th class="num">Kg totales</th><th class="num">Envases</th><th>Lote</th><th>Observaciones</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></section>';
     openPrintDoc('PGP · ' + mesNom + ' ' + anio, 'Planilla General de Productos · ' + mesNom + ' ' + anio, section);
+  }
+
+  // PDF: Salida (ventas del mes). Toma Artículo+Producto, Kg total, envases, lote, vto y destino.
+  function pdfSalida() {
+    // Necesitamos producción cargada para el Fecha Vto del lote.
+    if (state.mpprod.prod.rows == null) {
+      showLoader(true);
+      Api.list('PROD').then(function (rows) { state.mpprod.prod.rows = rows; showLoader(false); pdfSalida(); })
+        .catch(function (e) { showLoader(false); toast(e.message, true); });
+      return;
+    }
+    var esc = escapeHtml;
+    var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
+    var rows = (state.ventas.rows || []).filter(function (r) { return inPeriod(r['Fecha']) && r['Producto']; })
+      .sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
+    function prodInfo(p) { return productosLista().filter(function (x) { return x['Producto'] === p; })[0] || {}; }
+    function vtoLote(prod, lote) {
+      var m = (state.mpprod.prod.rows || []).filter(function (r) { return r['Producto'] === prod && r['Lote'] === lote; })[0];
+      return m ? (m['Fecha Vto'] || '') : '';
+    }
+    var body = rows.length
+      ? rows.map(function (r) {
+          var pi = prodInfo(r['Producto']);
+          var env = toNum(r['Cantidad']);
+          var kg = env * toNum(pi['Kg por envase']);
+          var prodLbl = ((pi['Artículo'] ? pi['Artículo'] + ' ' : '') + (r['Producto'] || '')).trim();
+          return '<tr>' +
+            '<td>' + esc(isoToShort(r['Fecha'])) + '</td>' +
+            '<td>' + esc(prodLbl) + '</td>' +
+            '<td class="num">' + (kg ? kg.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '') + '</td>' +
+            '<td class="num">' + esc(env ? String(env) : '') + '</td>' +
+            '<td>' + esc(r['Lote'] || '') + '</td>' +
+            '<td>' + esc(vtoLote(r['Producto'], r['Lote'])) + '</td>' +
+            '<td>' + esc(r['Lista/Canal'] || '') + '</td>' +
+            '<td></td></tr>';
+        }).join('')
+      : '<tr><td colspan="8" class="empty">Sin ventas en el período.</td></tr>';
+    var section = '<section class="poe"><h2>Salida de Productos</h2>' +
+      '<table><thead><tr><th>Fecha</th><th>Producto</th><th class="num">Kg en total</th><th class="num">Envases</th><th>Lote</th><th>Fecha Vto</th><th>Destino</th><th>Observaciones</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></section>';
+    openPrintDoc('Salida · ' + mesNom + ' ' + anio, 'Salida de Productos · ' + mesNom + ' ' + anio, section);
   }
 
   function mpTableHtml() {
