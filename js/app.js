@@ -1117,7 +1117,7 @@
     var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
       '<span class="ico"><i data-lucide="search"></i></span>' +
       '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div>' + poeBtn + pgpBtn + '</div>';
-    $('view').innerHTML = tabs + search + (isMp ? mpTableHtml() : prodTableHtml());
+    $('view').innerHTML = tabs + search + (isMp ? mpTableHtml() : (prodTableHtml() + stockMasterHtml()));
 
     Array.prototype.forEach.call($('view').querySelectorAll('[data-tab]'), function (el) {
       el.addEventListener('click', function () { switchMpTab(el.getAttribute('data-tab')); });
@@ -1351,9 +1351,8 @@
     });
     if (rows.length === 0) return emptyHtml('utensils', 'Sin producción este mes', 'No hay producción para este filtro.');
     var head = '<div class="dt-head"><div>Fecha</div><div>Categoría</div><div>Artículo</div><div>Producto</div>' +
-      '<div class="r-right">Unidades producidas</div><div>OBS</div><div class="r-right">Descuento</div><div class="r-right">Stock</div><div></div></div>';
+      '<div class="r-right">Unidades producidas</div><div>OBS</div><div class="r-right">Descuento</div><div></div></div>';
     var trs = rows.map(function (r) {
-      var stock = loteStock(r['Producto'], r['Lote']);
       return '<div class="dt-row">' +
         '<div class="date" style="font-size:12px;">' + isoToShort(r['Fecha']) + '</div>' +
         '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
@@ -1365,15 +1364,44 @@
         '<div class="num strong">' + num(r['Unidades']) + '</div>' +
         '<div class="text-3" style="font-size:12px;">' + escapeHtml(r['OBS1'] || '—') + '</div>' +
         '<div class="num muted">' + escapeHtml(String(r['Descuento'] == null ? '' : r['Descuento'])) + '</div>' +
-        '<div class="num strong" style="' + (stock <= 0 ? 'color:var(--color-primary);' : 'color:var(--color-accent-700);') + '">' + num(stock) + '</div>' +
         rowActionsHtml(r._row) + '</div>';
     }).join('');
     var totalU = rows.reduce(function (a, r) { return a + toNum(r['Unidades']); }, 0);
-    var totalStock = rows.reduce(function (a, r) { return a + loteStock(r['Producto'], r['Lote']); }, 0);
     var foot = '<div class="dt-foot"><div>' + rows.length + ' registros</div>' +
-      '<div>Unidades producidas <span class="num strong" style="padding:0; margin-left:6px;">' + num(totalU) + '</span>' +
-      '<span style="margin:0 10px; color:var(--color-text-3);">·</span>Stock <span class="num strong" style="padding:0; margin-left:6px; color:var(--color-accent-700);">' + num(totalStock) + '</span></div></div>';
+      '<div>Unidades producidas <span class="num strong" style="padding:0; margin-left:6px;">' + num(totalU) + '</span></div></div>';
     return '<div class="data-table tbl-prod">' + head + trs + foot + '</div>';
+  }
+
+  // Lista maestra de stock: productos con stock por lote, independiente del mes.
+  function stockMasterHtml() {
+    var seen = {}, items = [];
+    (state.mpprod.prod.rows || []).forEach(function (p) {
+      var ob = String(p['OBS1'] || '').trim().toUpperCase();
+      if (!p['Producto'] || !p['Lote'] || ob === 'SF' || ob === 'SI') return;
+      var key = p['Producto'] + '|' + p['Lote']; if (seen[key]) return; seen[key] = 1;
+      var st = loteStock(p['Producto'], p['Lote']);
+      if (st > 0) items.push({ producto: p['Producto'], articulo: p['Artículo'] || '', lote: p['Lote'], vto: p['Fecha Vto'] || '', stock: st });
+    });
+    items.sort(function (a, b) { return (a.producto + a.lote).localeCompare(b.producto + b.lote); });
+    var inner;
+    if (!items.length) {
+      inner = emptyHtml('package', 'Sin stock', 'No hay productos con stock disponible.');
+    } else {
+      var head = '<div class="dt-head"><div>Producto</div><div>Lote</div><div>Fecha Vto</div><div class="r-right">Stock</div></div>';
+      var trs = items.map(function (it) {
+        return '<div class="dt-row">' +
+          '<div style="font-weight:500;">' + escapeHtml(((it.articulo ? it.articulo + ' ' : '') + it.producto).trim()) + '</div>' +
+          '<div class="mono" style="font-size:12.5px;">' + escapeHtml(it.lote) + '</div>' +
+          '<div class="muted">' + escapeHtml(it.vto || '—') + '</div>' +
+          '<div class="num strong" style="color:var(--color-accent-700);">' + num(it.stock) + '</div></div>';
+      }).join('');
+      var totalStock = items.reduce(function (a, it) { return a + it.stock; }, 0);
+      var foot = '<div class="dt-foot"><div>' + items.length + ' lotes con stock</div>' +
+        '<div>Stock total <span class="num strong" style="padding:0; margin-left:6px; color:var(--color-accent-700);">' + num(totalStock) + '</span></div></div>';
+      inner = '<div class="data-table tbl-stock">' + head + trs + foot + '</div>';
+    }
+    return '<div style="margin-top:26px;"><div class="cfg-title">Stock disponible</div>' +
+      '<div class="cfg-sub" style="margin-bottom:14px;">Productos con stock de producción (fijo, sin importar el mes).</div>' + inner + '</div>';
   }
 
   function mesNombre(m) { var n = Number(m); return (n >= 1 && n <= 12) ? MONTHS_SHORT[n - 1] : (m == null ? '' : String(m)); }

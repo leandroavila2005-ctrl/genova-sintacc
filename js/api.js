@@ -35,7 +35,11 @@ window.Api = (function () {
     lists:     function () { return call('lists'); },
     list:      function (sheet) { return call('list', { sheet: sheet }); },
     dashboard: function (anio) { return call('dashboard', { anio: anio }); },
-    create:    function (sheet, record) { return call('create', { sheet: sheet, record: record }); },
+    create:    function (sheet, record) {
+      // reqId único: si un mismo create se envía dos veces, el backend lo descarta (no duplica).
+      var rec = Object.assign({ reqId: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) }, record || {});
+      return call('create', { sheet: sheet, record: rec });
+    },
     update:    function (sheet, row, record) { return call('update', { sheet: sheet, row: row, record: record }); },
     remove:    function (sheet, row) { return call('delete', { sheet: sheet, row: row }); }
   };
