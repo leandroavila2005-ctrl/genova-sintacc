@@ -1369,8 +1369,10 @@
         rowActionsHtml(r._row) + '</div>';
     }).join('');
     var totalU = rows.reduce(function (a, r) { return a + toNum(r['Unidades']); }, 0);
+    var totalStock = rows.reduce(function (a, r) { return a + loteStock(r['Producto'], r['Lote']); }, 0);
     var foot = '<div class="dt-foot"><div>' + rows.length + ' registros</div>' +
-      '<div>Unidades <span class="num strong" style="padding:0; margin-left:6px;">' + num(totalU) + '</span></div></div>';
+      '<div>Unidades producidas <span class="num strong" style="padding:0; margin-left:6px;">' + num(totalU) + '</span>' +
+      '<span style="margin:0 10px; color:var(--color-text-3);">·</span>Stock <span class="num strong" style="padding:0; margin-left:6px; color:var(--color-accent-700);">' + num(totalStock) + '</span></div></div>';
     return '<div class="data-table tbl-prod">' + head + trs + foot + '</div>';
   }
 
