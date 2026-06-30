@@ -17,6 +17,7 @@
     ventas: { rows: null, filter: 'Todos', query: '' },
     mov: { rows: null, filter: 'Todas', iva: 'Todos', query: '' },
     mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' } },
+    precios: { query: '' },
     config: { section: 'mp' }
   };
 
@@ -194,11 +195,22 @@
   }
 
   function renderPrecios() {
-    var rows = productosLista();
+    var all = productosLista();
     var admin = isAdmin();
+    var q = state.precios.query.trim().toLowerCase();
+    var rows = all.filter(function (r) {
+      return q === '' || [r['Categoría'], r['Artículo'], r['Producto']].some(function (v) {
+        return String(v || '').toLowerCase().indexOf(q) >= 0;
+      });
+    });
+    var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
+      '<span class="ico"><i data-lucide="search"></i></span>' +
+      '<input id="precios-search" placeholder="Buscar producto…" value="' + escapeHtml(state.precios.query) + '"></div></div>';
     var body;
-    if (!rows.length) {
+    if (!all.length) {
       body = emptyHtml('tag', 'Sin productos', 'Cargá productos en Configuración → Productos terminados.');
+    } else if (!rows.length) {
+      body = search + emptyHtml('tag', 'Sin resultados', 'Probá con otro término de búsqueda.');
     } else {
       var note = admin
         ? '<div class="cfg-sub" style="margin-bottom:14px;">Editá el precio de cada producto; se guarda al salir del campo.</div>'
@@ -215,9 +227,15 @@
           '<div class="r-right">' + precioCell + '</div>' +
           '</div>';
       }).join('');
-      body = note + '<div class="data-table tbl-precios">' + head + trs + '</div>';
+      body = search + note + '<div class="data-table tbl-precios">' + head + trs + '</div>';
     }
     $('view').innerHTML = body;
+    var ps = $('precios-search');
+    if (ps) ps.addEventListener('input', function () {
+      state.precios.query = ps.value;
+      renderPrecios();
+      var ns = $('precios-search'); if (ns) { ns.focus(); ns.setSelectionRange(ns.value.length, ns.value.length); }
+    });
     if (admin) {
       Array.prototype.forEach.call($('view').querySelectorAll('.precio-input'), function (el) {
         el.addEventListener('change', function () { savePrecio(Number(el.getAttribute('data-row')), el.value); });
@@ -597,7 +615,9 @@
       var trs = view.map(function (r) {
         return '<div class="dt-row">' +
           '<div class="date">' + isoToShort(r['Fecha']) + '</div>' +
-          '<div style="font-weight:500;">' + escapeHtml(r['Lista/Canal']) + '</div>' +
+          '<div style="font-weight:500;">' + escapeHtml(r['Lista/Canal']) +
+            (r['Producto'] ? '<div class="muted" style="font-size:11.5px;">' + escapeHtml(r['Producto']) + (toNum(r['Cantidad']) ? ' ×' + escapeHtml(String(r['Cantidad'])) : '') + (toNum(r['Total venta']) ? ' · ' + money(r['Total venta']) : '') + '</div>' : '') +
+          '</div>' +
           '<div class="num muted">' + money(r['EFVO']) + '</div>' +
           '<div class="num muted">' + money(r['Tarj o cta']) + '</div>' +
           '<div class="num muted">' + money(r['MP']) + '</div>' +
@@ -644,14 +664,18 @@
 
   function openVentaModal(row) {
     var ed = !!row;
-    var cats = categorias().length ? categorias() : ['Minorista', 'Mayorista'];
-    var curCat = (row && row['cat']) || cats[0];
     var clientes = ((state.lists && state.lists.canales) || []).map(function (c) { return c['Nombre']; });
     var curCliente = (row && row['Lista/Canal']) || '';
     if (curCliente && clientes.indexOf(curCliente) < 0) clientes = [curCliente].concat(clientes);
-
     var clientOpts = '<option value="">— elegí un cliente —</option>' + clientes.map(function (n) {
       return '<option value="' + escapeHtml(n) + '"' + (n === curCliente ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+    }).join('');
+
+    var prods = productosLista().map(function (p) { return p['Producto']; }).filter(Boolean);
+    var curProd = (row && row['Producto']) || '';
+    if (curProd && prods.indexOf(curProd) < 0) prods = [curProd].concat(prods);
+    var prodOpts = '<option value="">— elegí un producto —</option>' + prods.map(function (n) {
+      return '<option value="' + escapeHtml(n) + '"' + (n === curProd ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
     }).join('');
 
     var body =
@@ -659,7 +683,11 @@
         fld('Fecha', '<input id="f-fecha" class="fld-input" placeholder="14/03 o 14/03/2026" value="' + escapeHtml(ed ? isoToInput(row['Fecha']) : '') + '"><div class="fld-err" id="e-fecha"></div>') +
         fld('Cliente', '<select id="f-cliente" class="fld-input">' + clientOpts + '</select><div class="fld-err" id="e-cliente"></div>') +
       '</div>' +
-      '<div style="margin-bottom:16px;"><div class="fld-label">Canal</div>' + optGroupHtml('cat', cats, curCat) + '</div>' +
+      '<div class="form-grid g-2">' +
+        fld('Producto', '<select id="f-vprod" class="fld-input">' + prodOpts + '</select><div class="fld-err" id="e-vprod"></div>') +
+        fld('Cantidad', '<input id="f-vcant" class="fld-input" inputmode="decimal" placeholder="0" value="' + escapeHtml(ed ? (row['Cantidad'] == null ? '' : String(row['Cantidad'])) : '') + '">') +
+      '</div>' +
+      '<div class="vta-total"><span class="vta-total-lbl">Total de la venta</span><span class="vta-total-val" id="f-vtotal">$0</span></div>' +
       '<div class="form-grid g-3" style="margin-bottom:0;">' +
         fld('Efectivo', moneyInput('f-efvo', row && row['EFVO'])) +
         fld('Tarjeta', moneyInput('f-tarj', row && row['Tarj o cta'])) +
@@ -673,26 +701,38 @@
       onSave: function (btn) { saveVenta(btn, ed ? row._row : null); }
     });
 
-    // autocompletar categoría según cliente elegido
-    var sel = $('f-cliente');
-    sel.addEventListener('change', function () {
-      var c = ((state.lists && state.lists.canales) || []).filter(function (x) { return x['Nombre'] === sel.value; })[0];
-      if (c && c['Categoría']) setOptGroup('cat', c['Categoría']);
-    });
+    function vprecio() { var p = productosLista().filter(function (x) { return x['Producto'] === $('f-vprod').value; })[0]; return p ? toNum(p['Precio']) : 0; }
+    function recalc() { $('f-vtotal').textContent = money(vprecio() * toNum($('f-vcant').value)); }
+    $('f-vprod').addEventListener('change', recalc);
+    $('f-vcant').addEventListener('input', recalc);
+    recalc();
   }
 
   function saveVenta(btn, rowNum) {
     var fecha = $('f-fecha').value.trim();
     var cliente = $('f-cliente').value;
-    var cat = optGroupVal('cat');
+    var producto = $('f-vprod').value;
+    var cant = toNum($('f-vcant').value);
     var ok = true;
     var fechaN = normalizeFecha(fecha);
     if (!fechaN) { fieldError('f-fecha', 'e-fecha', 'Fecha DD/MM o DD/MM/AAAA'); ok = false; } else fieldOk('f-fecha', 'e-fecha');
     if (!cliente) { fieldError('f-cliente', 'e-cliente', 'Elegí un cliente'); ok = false; } else fieldOk('f-cliente', 'e-cliente');
+    if (!producto) { fieldError('f-vprod', 'e-vprod', 'Elegí un producto'); ok = false; } else fieldOk('f-vprod', 'e-vprod');
     if (!ok) return;
+
+    var existing = rowNum ? ((state.ventas.rows || []).filter(function (r) { return r._row === rowNum; })[0] || {}) : {};
+    // Categoría: del canal del cliente elegido (cae al valor previo si el cliente no está en la lista).
+    var cmatch = ((state.lists && state.lists.canales) || []).filter(function (x) { return x['Nombre'] === cliente; })[0];
+    var cat = cmatch ? (cmatch['Categoría'] || '') : (existing['cat'] || '');
+    // Precio congelado: si en edición no cambió producto ni cantidad, se respeta el total ya cerrado.
+    var same = rowNum && existing['Producto'] === producto && toNum(existing['Cantidad']) === cant;
+    var pmatch = productosLista().filter(function (x) { return x['Producto'] === producto; })[0];
+    var precio = same ? toNum(existing['Precio unit']) : (pmatch ? toNum(pmatch['Precio']) : 0);
+    var totalVenta = same ? toNum(existing['Total venta']) : cant * precio;
 
     var record = {
       'Fecha': fechaN, 'Lista/Canal': cliente, 'cat': cat,
+      'Producto': producto, 'Cantidad': cant, 'Precio unit': precio, 'Total venta': totalVenta,
       'EFVO': toNum($('f-efvo').value), 'Tarj o cta': toNum($('f-tarj').value), 'MP': toNum($('f-cuenta').value)
     };
     setBtnLoading(btn, true, rowNum ? 'Guardar cambios' : 'Guardar venta');
@@ -1461,7 +1501,10 @@
     var rows = cfgRows(sec);
     if (rows.length === 0) return emptyHtml(sec.icon, 'Lista vacía', isAdmin() ? 'Agregá el primer registro.' : 'Todavía no hay registros.');
     var cols = sec.cols;
-    var head = '<div class="dt-head">' + cols.map(function (c) { return '<div>' + escapeHtml(c) + '</div>'; }).join('') + '<div></div></div>';
+    var head = '<div class="dt-head">' + cols.map(function (c) {
+      var lbl = (sec.key === 'cli' && c === 'Categoría') ? 'Canal' : c;
+      return '<div>' + escapeHtml(lbl) + '</div>';
+    }).join('') + '<div></div></div>';
     var trs = rows.map(function (r) {
       var cells = cols.map(function (c, i) {
         var val = r[c];
@@ -1540,6 +1583,7 @@
       body = sec.cols.map(function (col, i) {
         var val = ed ? (row[col] || '') : '';
         if (col === 'Rol') return '<div style="margin-bottom:16px;"><div class="fld-label">Rol</div>' + optGroupHtml('cfg-' + i, ['admin', 'socio'], val || 'socio') + '</div>';
+        if (col === 'Categoría' && sec.key === 'cli') return '<div style="margin-bottom:16px;"><div class="fld-label">Canal</div>' + optGroupHtml('cfg-' + i, ['Mayorista', 'Minorista'], val || 'Minorista') + '</div>';
         if (col === 'Aplica IVA') return '<div style="margin-bottom:16px;"><div class="fld-label">Aplica IVA</div>' + optGroupHtml('cfg-' + i, ['Sí', 'No'], val || 'No') + '</div>';
         if (col === 'Clasificación') {
           var opciones = (val && CLASIF_FIJAS.indexOf(val) < 0) ? [val].concat(CLASIF_FIJAS) : CLASIF_FIJAS;
@@ -1580,7 +1624,7 @@
     var record = {}, ok = true;
     sec.cols.forEach(function (col, i) {
       var val;
-      if (col === 'Rol' || col === 'Aplica IVA') val = optGroupVal('cfg-' + i);
+      if (col === 'Rol' || col === 'Aplica IVA' || (col === 'Categoría' && sec.key === 'cli')) val = optGroupVal('cfg-' + i);
       else val = $('cfg-' + i).value.trim();
       record[col] = val;
     });

@@ -429,6 +429,9 @@
 .cfg-cols-6 .dt-head, .cfg-cols-6 .dt-row { grid-template-columns: 0.9fr 1fr 1.3fr 1fr 0.9fr 0.9fr 72px; }
 .tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 1fr 1.2fr 1.4fr 120px; }
 .precio-input { text-align: right; padding: 7px 9px; height: auto; }
+.vta-total { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--color-surface-warm); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; }
+.vta-total-lbl { font-size: 12px; color: var(--color-text-2); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.vta-total-val { font-family: var(--font-mono); font-size: 20px; font-weight: 600; color: var(--color-primary); }
 .cfg-users .dt-head, .cfg-users .dt-row { grid-template-columns: 1.6fr 150px 72px; }
 .cfg-users .dt-row { height: 50px; }
 
