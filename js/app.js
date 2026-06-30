@@ -949,15 +949,17 @@
     var q = isMp ? state.mpprod.mp.query : state.mpprod.prod.query;
     var ph = isMp ? 'Buscar insumo…' : 'Buscar artículo o producto…';
     var poeBtn = isMp ? '<button class="btn btn-secondary" id="mp-poe" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>POE</button>' : '';
+    var pgpBtn = !isMp ? '<button class="btn btn-secondary" id="mp-pgp" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>PGP</button>' : '';
     var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
       '<span class="ico"><i data-lucide="search"></i></span>' +
-      '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div>' + poeBtn + '</div>';
+      '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div>' + poeBtn + pgpBtn + '</div>';
     $('view').innerHTML = tabs + search + (isMp ? mpTableHtml() : prodTableHtml());
 
     Array.prototype.forEach.call($('view').querySelectorAll('[data-tab]'), function (el) {
       el.addEventListener('click', function () { switchMpTab(el.getAttribute('data-tab')); });
     });
     var poe = $('mp-poe'); if (poe) poe.onclick = pdfPOE;
+    var pgp = $('mp-pgp'); if (pgp) pgp.onclick = pdfPGP;
     var s = $('mp-search');
     if (s) s.addEventListener('input', function () {
       if (isMp) state.mpprod.mp.query = s.value; else state.mpprod.prod.query = s.value;
@@ -1033,6 +1035,72 @@
     var w = window.open('', '_blank');
     if (!w) { toast('Permití las ventanas emergentes para generar el PDF', true); return; }
     w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  // Documento imprimible con diseño de marca (encabezado + secciones + pie). Usado por PGP.
+  function openPrintDoc(winTitle, headerSub, sectionsHtml) {
+    var esc = escapeHtml;
+    var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
+    var html =
+      '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">' +
+      '<title>' + esc(winTitle) + '</title>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Spectral:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">' +
+      '<style>' +
+      '*{box-sizing:border-box;} body{font-family:"Public Sans",sans-serif;color:#211E1C;background:#fff;margin:0;padding:26px 24px 64px;}' +
+      '.doc-head{border-bottom:3px solid #C8102E;padding-bottom:10px;margin-bottom:18px;}' +
+      '.doc-head .brand{font-family:"Libre Caslon Display",serif;font-size:23px;color:#1C1A19;}' +
+      '.doc-head .brand b{color:#C8102E;font-weight:400;}' +
+      '.doc-head .sub{font-size:12px;color:#6B655E;margin-top:3px;}' +
+      'section.poe{margin-bottom:22px;page-break-inside:avoid;}' +
+      'section.poe h2{font-family:"Spectral",serif;font-size:13.5px;color:#fff;background:#1C1A19;padding:8px 12px;border-left:5px solid #E8B84B;margin:0;}' +
+      'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+      'thead th{background:#F6F0E6;color:#1C1A19;text-align:left;padding:7px 8px;border:1px solid #E2D9C7;font-weight:600;}' +
+      'tbody td{padding:6px 8px;border:1px solid #E2D9C7;vertical-align:top;}' +
+      'th.num,td.num{text-align:right;font-variant-numeric:tabular-nums;}' +
+      'td.empty{text-align:center;color:#A89F8C;font-style:italic;}' +
+      '.poe-foot{position:fixed;bottom:0;left:0;right:0;height:46px;border-top:1px solid #E2D9C7;padding:0 24px;font-size:10.5px;color:#6B655E;display:flex;justify-content:space-between;align-items:center;background:#fff;}' +
+      '.poe-foot .gold{color:#B98A1E;font-weight:600;}' +
+      '.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;}' +
+      '.toolbar button{font-family:inherit;font-size:13px;font-weight:600;border:none;border-radius:8px;padding:9px 16px;background:#C8102E;color:#fff;cursor:pointer;}' +
+      '@page{size:A4;margin:14mm 10mm 18mm;}' +
+      '@media print{.noprint{display:none;}body{padding-top:6px;}}' +
+      '</style></head><body>' +
+      '<div class="noprint toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>' +
+      '<div class="doc-head"><div class="brand">Génova <b>Sin TACC</b></div>' +
+      '<div class="sub">' + esc(headerSub) + '</div></div>' +
+      sectionsHtml +
+      '<div class="poe-foot"><span>Génova Sin TACC</span><span class="gold">' + esc(mesNom) + ' ' + anio + '</span></div>' +
+      '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},500);});<\/script>' +
+      '</body></html>';
+    var w = window.open('', '_blank');
+    if (!w) { toast('Permití las ventanas emergentes para generar el PDF', true); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  // PDF: Planilla General de Productos (producción del mes seleccionado).
+  function pdfPGP() {
+    var esc = escapeHtml;
+    var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
+    var rows = (state.mpprod.prod.rows || []).filter(function (r) { return inPeriod(r['Fecha']); })
+      .sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
+    function kgEnv(prod) { var m = productosLista().filter(function (p) { return p['Producto'] === prod; })[0]; return m ? toNum(m['Kg por envase']) : 0; }
+    var body = rows.length
+      ? rows.map(function (r) {
+          var env = toNum(r['Unidades']);
+          var kg = env * kgEnv(r['Producto']);
+          return '<tr>' +
+            '<td>' + esc(isoToShort(r['Fecha'])) + '</td>' +
+            '<td>' + esc(r['Producto'] || '') + '</td>' +
+            '<td class="num">' + (kg ? kg.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '') + '</td>' +
+            '<td class="num">' + esc(env ? String(env) : '') + '</td>' +
+            '<td>' + esc(r['Lote'] || '') + '</td>' +
+            '<td></td></tr>';
+        }).join('')
+      : '<tr><td colspan="6" class="empty">Sin producción en el período.</td></tr>';
+    var section = '<section class="poe"><h2>Planilla General de Productos</h2>' +
+      '<table><thead><tr><th>Fecha</th><th>Producto</th><th class="num">Kg totales</th><th class="num">Envases</th><th>Lote</th><th>Observaciones</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></section>';
+    openPrintDoc('PGP · ' + mesNom + ' ' + anio, 'Planilla General de Productos · ' + mesNom + ' ' + anio, section);
   }
 
   function mpTableHtml() {
