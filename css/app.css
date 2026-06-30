@@ -489,6 +489,22 @@
   /* Buscadores ocupan la fila completa */
   .filters .search-box { flex: 1 1 100%; }
   .view { padding: 16px 14px; }
+  /* Tablas -> tarjetas apiladas (fecha arriba, concepto + montos debajo, acciones esquina) */
+  .data-table { background: transparent; border: none; box-shadow: none; }
+  .data-table .dt-head { display: none; }
+  .data-table .dt-row {
+    position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 12px;
+    height: auto; min-height: 0; padding: 12px 76px 12px 14px;
+    background: var(--color-surface-card); border: 1px solid var(--card-border);
+    border-radius: 12px; margin-bottom: 10px;
+  }
+  .data-table .dt-row > div { padding: 0; min-width: 0; }
+  .data-table .dt-row .date { flex-basis: 100%; order: -1; font-weight: 600; font-size: 12px; color: var(--color-text-2); }
+  .data-table .dt-row > div:not(.date):not(.num):not(.r-center):not(.r-right):not(.row-actions) { flex-basis: 100%; font-size: 13px; }
+  .data-table .dt-row .num { font-size: 13px; white-space: nowrap; }
+  .data-table .dt-row .num.strong { font-size: 15px; color: var(--color-ink); }
+  .data-table .dt-row .row-actions { position: absolute; top: 10px; right: 10px; }
+  .data-table .dt-foot { background: var(--color-surface-card); border: 1px solid var(--card-border); border-radius: 12px; }
   .config-layout { flex-direction: column; }
   .config-side { width: auto; border-right: none; border-bottom: 1px solid var(--input-border); padding-right: 0; padding-bottom: 12px; margin-bottom: 12px; flex-direction: row; flex-wrap: wrap; }
   .config-main { padding-left: 0; }
