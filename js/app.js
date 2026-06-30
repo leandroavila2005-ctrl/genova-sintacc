@@ -171,10 +171,10 @@
       ha.onclick = null;
     }
     var ha2 = $('header-action2');
-    if (route === 'mp') {
+    if (route === 'mp' && state.mpprod.tab === 'mp') {
       ha2.classList.remove('is-hidden');
       ha2.innerHTML = '<span class="ico"><i data-lucide="calculator"></i></span><span class="btn-label">Saldos Finales</span>';
-      ha2.onclick = function () { openSaldosModal(state.mpprod.tab); };
+      ha2.onclick = function () { openSaldosModal('mp'); };
     } else {
       ha2.classList.add('is-hidden');
       ha2.onclick = null;
@@ -616,7 +616,7 @@
         return '<div class="dt-row">' +
           '<div class="date">' + isoToShort(r['Fecha']) + '</div>' +
           '<div style="font-weight:500;">' + escapeHtml(r['Lista/Canal']) +
-            (r['Producto'] ? '<div class="muted" style="font-size:11.5px;">' + escapeHtml(r['Producto']) + (toNum(r['Cantidad']) ? ' ×' + escapeHtml(String(r['Cantidad'])) : '') + (toNum(r['Total venta']) ? ' · ' + money(r['Total venta']) : '') + '</div>' : '') +
+            (r['Producto'] ? '<div class="muted" style="font-size:11.5px;">' + escapeHtml(r['Producto']) + (toNum(r['Cantidad']) ? ' ×' + escapeHtml(String(r['Cantidad'])) : '') + (r['Lote'] ? ' · ' + escapeHtml(r['Lote']) : '') + (toNum(r['Total venta']) ? ' · ' + money(r['Total venta']) : '') + '</div>' : '') +
           '</div>' +
           '<div class="num muted">' + money(r['EFVO']) + '</div>' +
           '<div class="num muted">' + money(r['Tarj o cta']) + '</div>' +
@@ -663,6 +663,13 @@
   function rowByNum(n) { n = Number(n); return (state.ventas.rows || []).filter(function (r) { return r._row === n; })[0] || null; }
 
   function openVentaModal(row) {
+    // Stock por lote: necesitamos producción cargada para saber qué productos/lotes tienen stock.
+    if (state.mpprod.prod.rows == null) {
+      showLoader(true);
+      Api.list('PROD').then(function (rows) { state.mpprod.prod.rows = rows; showLoader(false); openVentaModal(row); })
+        .catch(function (e) { showLoader(false); toast(e.message, true); });
+      return;
+    }
     var ed = !!row;
     var clientes = ((state.lists && state.lists.canales) || []).map(function (c) { return c['Nombre']; });
     var curCliente = (row && row['Lista/Canal']) || '';
@@ -671,9 +678,9 @@
       return '<option value="' + escapeHtml(n) + '"' + (n === curCliente ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
     }).join('');
 
-    var prods = productosLista().map(function (p) { return p['Producto']; }).filter(Boolean);
+    var prods = productosConStock();
     var curProd = (row && row['Producto']) || '';
-    if (curProd && prods.indexOf(curProd) < 0) prods = [curProd].concat(prods);
+    if (curProd && prods.indexOf(curProd) < 0) prods = [curProd].concat(prods); // editar: conservar el producto de la venta
     var prodOpts = '<option value="">— elegí un producto —</option>' + prods.map(function (n) {
       return '<option value="' + escapeHtml(n) + '"' + (n === curProd ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
     }).join('');
@@ -685,9 +692,12 @@
       '</div>' +
       '<div class="form-grid g-2">' +
         fld('Producto', '<select id="f-vprod" class="fld-input">' + prodOpts + '</select><div class="fld-err" id="e-vprod"></div>') +
-        fld('Cantidad', '<input id="f-vcant" class="fld-input" inputmode="decimal" placeholder="0" value="' + escapeHtml(ed ? (row['Cantidad'] == null ? '' : String(row['Cantidad'])) : '') + '">') +
+        fld('Envase / Lote', '<select id="f-vlote" class="fld-input"></select><div class="fld-err" id="e-vlote"></div>') +
       '</div>' +
-      '<div class="vta-total"><span class="vta-total-lbl">Total de la venta</span><span class="vta-total-val" id="f-vtotal">$0</span></div>' +
+      '<div class="form-grid g-2">' +
+        fld('Cantidad', '<input id="f-vcant" class="fld-input" inputmode="decimal" placeholder="0" value="' + escapeHtml(ed ? (row['Cantidad'] == null ? '' : String(row['Cantidad'])) : '') + '"><div class="fld-err" id="e-vcant"></div>') +
+        '<div class="vta-total" style="margin-bottom:0;"><span class="vta-total-lbl">Total</span><span class="vta-total-val" id="f-vtotal">$0</span></div>' +
+      '</div>' +
       '<div class="form-grid g-3" style="margin-bottom:0;">' +
         fld('Efectivo', moneyInput('f-efvo', row && row['EFVO'])) +
         fld('Tarjeta', moneyInput('f-tarj', row && row['Tarj o cta'])) +
@@ -701,10 +711,21 @@
       onSave: function (btn) { saveVenta(btn, ed ? row._row : null); }
     });
 
+    var curLote = (row && row['Lote']) || '';
+    function fillLotes() {
+      var lotes = lotesConStock($('f-vprod').value);
+      if (ed && curProd === $('f-vprod').value && curLote && !lotes.some(function (l) { return l.lote === curLote; })) {
+        lotes = [{ lote: curLote, stock: loteStock(curProd, curLote), vto: '' }].concat(lotes);
+      }
+      $('f-vlote').innerHTML = lotes.length
+        ? lotes.map(function (l) { return '<option value="' + escapeHtml(l.lote) + '"' + (l.lote === curLote ? ' selected' : '') + '>' + escapeHtml(l.lote) + ' · stock ' + num(l.stock) + (l.vto ? ' · vto ' + escapeHtml(l.vto) : '') + '</option>'; }).join('')
+        : '<option value="">— sin lotes con stock —</option>';
+    }
     function vprecio() { var p = productosLista().filter(function (x) { return x['Producto'] === $('f-vprod').value; })[0]; return p ? toNum(p['Precio']) : 0; }
     function recalc() { $('f-vtotal').textContent = money(vprecio() * toNum($('f-vcant').value)); }
-    $('f-vprod').addEventListener('change', recalc);
+    $('f-vprod').addEventListener('change', function () { fillLotes(); recalc(); });
     $('f-vcant').addEventListener('input', recalc);
+    fillLotes();
     recalc();
   }
 
@@ -712,12 +733,15 @@
     var fecha = $('f-fecha').value.trim();
     var cliente = $('f-cliente').value;
     var producto = $('f-vprod').value;
+    var lote = $('f-vlote') ? $('f-vlote').value : '';
     var cant = toNum($('f-vcant').value);
     var ok = true;
     var fechaN = normalizeFecha(fecha);
     if (!fechaN) { fieldError('f-fecha', 'e-fecha', 'Fecha DD/MM o DD/MM/AAAA'); ok = false; } else fieldOk('f-fecha', 'e-fecha');
     if (!cliente) { fieldError('f-cliente', 'e-cliente', 'Elegí un cliente'); ok = false; } else fieldOk('f-cliente', 'e-cliente');
     if (!producto) { fieldError('f-vprod', 'e-vprod', 'Elegí un producto'); ok = false; } else fieldOk('f-vprod', 'e-vprod');
+    if (!lote) { fieldError('f-vlote', 'e-vlote', 'Elegí el lote'); ok = false; } else fieldOk('f-vlote', 'e-vlote');
+    if (!(cant > 0)) { fieldError('f-vcant', 'e-vcant', 'Cantidad mayor a 0'); ok = false; } else fieldOk('f-vcant', 'e-vcant');
     if (!ok) return;
 
     var existing = rowNum ? ((state.ventas.rows || []).filter(function (r) { return r._row === rowNum; })[0] || {}) : {};
@@ -732,7 +756,7 @@
 
     var record = {
       'Fecha': fechaN, 'Lista/Canal': cliente, 'cat': cat,
-      'Producto': producto, 'Cantidad': cant, 'Precio unit': precio, 'Total venta': totalVenta,
+      'Producto': producto, 'Lote': lote, 'Cantidad': cant, 'Precio unit': precio, 'Total venta': totalVenta,
       'EFVO': toNum($('f-efvo').value), 'Tarj o cta': toNum($('f-tarj').value), 'MP': toNum($('f-cuenta').value)
     };
     setBtnLoading(btn, true, rowNum ? 'Guardar cambios' : 'Guardar venta');
@@ -962,7 +986,46 @@
     var t = state.mpprod.tab;
     if (t === 'mp' && state.mpprod.mp.rows == null) { loadingView(); return loadMpData(); }
     if (t === 'prod' && state.mpprod.prod.rows == null) { loadingView(); return loadProdData(); }
+    // Stock por lote: Producción necesita las ventas para descontar lo vendido.
+    if (t === 'prod' && state.ventas.rows == null) {
+      Api.list('VENTAS').then(function (rows) { state.ventas.rows = rows; if (state.route === 'mp' && state.mpprod.tab === 'prod') renderMpProd(); }).catch(function () {});
+    }
     renderMpProd();
+  }
+
+  // ----- Stock por lote (producción menos ventas de ese lote) -----
+  function loteVendido(producto, lote) {
+    return (state.ventas.rows || []).reduce(function (a, v) {
+      return a + ((v['Producto'] === producto && v['Lote'] === lote) ? toNum(v['Cantidad']) : 0);
+    }, 0);
+  }
+  function loteProducido(producto, lote) {
+    return (state.mpprod.prod.rows || []).reduce(function (a, p) {
+      var ob = String(p['OBS1'] || '').trim().toUpperCase();
+      return a + ((p['Producto'] === producto && p['Lote'] === lote && ob !== 'SF' && ob !== 'SI') ? toNum(p['Unidades']) : 0);
+    }, 0);
+  }
+  function loteStock(producto, lote) { return loteProducido(producto, lote) - loteVendido(producto, lote); }
+  function lotesConStock(producto) {
+    var seen = {}, out = [];
+    (state.mpprod.prod.rows || []).forEach(function (p) {
+      var ob = String(p['OBS1'] || '').trim().toUpperCase();
+      if (p['Producto'] !== producto || !p['Lote'] || ob === 'SF' || ob === 'SI' || seen[p['Lote']]) return;
+      seen[p['Lote']] = 1;
+      var st = loteStock(producto, p['Lote']);
+      if (st > 0) out.push({ lote: p['Lote'], stock: st, vto: p['Fecha Vto'] || '' });
+    });
+    return out;
+  }
+  function productosConStock() {
+    var seen = {}, out = [];
+    (state.mpprod.prod.rows || []).forEach(function (p) {
+      var ob = String(p['OBS1'] || '').trim().toUpperCase();
+      if (!p['Producto'] || ob === 'SF' || ob === 'SI' || seen[p['Producto']]) return;
+      seen[p['Producto']] = 1;
+      if (lotesConStock(p['Producto']).length) out.push(p['Producto']);
+    });
+    return out;
   }
   function loadMpData(silent) {
     if (!silent) showLoader(true);
@@ -1178,14 +1241,16 @@
   function prodTableHtml() {
     var q = (state.mpprod.prod.query || '').trim().toLowerCase();
     var rows = (state.mpprod.prod.rows || []).filter(function (r) {
-      return inPeriod(r['Fecha']) && (q === '' ||
+      var ob = String(r['OBS1'] || '').trim().toUpperCase();
+      return inPeriod(r['Fecha']) && ob !== 'SF' && ob !== 'SI' && (q === '' ||
         String(r['Artículo'] || '').toLowerCase().indexOf(q) >= 0 ||
         String(r['Producto'] || '').toLowerCase().indexOf(q) >= 0);
     });
     if (rows.length === 0) return emptyHtml('utensils', 'Sin producción este mes', 'No hay producción para este filtro.');
     var head = '<div class="dt-head"><div>Fecha</div><div>Categoría</div><div>Artículo</div><div>Producto</div>' +
-      '<div class="r-right">Unidades</div><div>OBS</div><div class="r-right">Descuento</div><div></div></div>';
+      '<div class="r-right">Unidades producidas</div><div>OBS</div><div class="r-right">Descuento</div><div class="r-right">Stock</div><div></div></div>';
     var trs = rows.map(function (r) {
+      var stock = loteStock(r['Producto'], r['Lote']);
       return '<div class="dt-row">' +
         '<div class="date" style="font-size:12px;">' + isoToShort(r['Fecha']) + '</div>' +
         '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
@@ -1197,6 +1262,7 @@
         '<div class="num strong">' + num(r['Unidades']) + '</div>' +
         '<div class="text-3" style="font-size:12px;">' + escapeHtml(r['OBS1'] || '—') + '</div>' +
         '<div class="num muted">' + escapeHtml(String(r['Descuento'] == null ? '' : r['Descuento'])) + '</div>' +
+        '<div class="num strong" style="' + (stock <= 0 ? 'color:var(--color-primary);' : 'color:var(--color-accent-700);') + '">' + num(stock) + '</div>' +
         rowActionsHtml(r._row) + '</div>';
     }).join('');
     var totalU = rows.reduce(function (a, r) { return a + toNum(r['Unidades']); }, 0);

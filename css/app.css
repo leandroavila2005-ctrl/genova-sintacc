@@ -420,7 +420,7 @@
 .tbl-ventas .dt-head, .tbl-ventas .dt-row { grid-template-columns: 84px 1.4fr 110px 130px 96px 120px 108px 72px; }
 .tbl-mov .dt-head, .tbl-mov .dt-row { grid-template-columns: 84px 1.5fr 120px 60px 150px 1.1fr 72px; }
 .tbl-mp .dt-head, .tbl-mp .dt-row { grid-template-columns: 84px 1.6fr 110px 120px 130px 72px; }
-.tbl-prod .dt-head, .tbl-prod .dt-row { grid-template-columns: 78px 96px 110px 1.3fr 86px 1fr 84px 64px; padding: 0 22px; }
+.tbl-prod .dt-head, .tbl-prod .dt-row { grid-template-columns: 70px 84px 100px 1.2fr 84px 0.9fr 78px 70px 60px; padding: 0 20px; }
 .tbl-prod .dt-row { font-size: 12.5px; }
 .cfg-list .dt-head, .cfg-list .dt-row { grid-template-columns: 1fr 1.6fr 1fr 72px; }
 .cfg-cols-3 .dt-head, .cfg-cols-3 .dt-row { grid-template-columns: 1fr 1.6fr 1fr 72px; }

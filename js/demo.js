@@ -47,7 +47,7 @@
   // ---- movimientos / MP / producción (generados ene–jun) ----
   function mov(fe, co, ob, mt, iv, cl) { return { 'Fecha': fe, 'Lista/Concepto': co, 'Observación': ob, 'Monto': mt, 'IVA': iv, 'Clasif': cl, 'AÑO': +fe.slice(0, 4), 'MES': +fe.slice(5, 7) }; }
   function mp(fe, id, no, ca, pr) { return { 'Fecha': fe, 'ID insumo': id, 'Nombre': no, 'Cantidad': ca, 'Precio unitario': pr, 'Total': toNum(ca) * pr, 'Mes': +fe.slice(5, 7) }; }
-  function prod(fe, ca, ar, pr, ud) { return { 'Fecha': fe, 'Categoría': ca, 'Artículo': ar, 'Producto': pr, 'Unidades': ud, 'OBS1': '', 'Descuento': '0%', 'Mes': +fe.slice(5, 7) }; }
+  function prod(fe, ca, ar, pr, ud) { var lote = ar.slice(0, 2).toUpperCase() + '-' + fe.slice(8, 10) + fe.slice(5, 7) + fe.slice(0, 4); return { 'Fecha': fe, 'Categoría': ca, 'Artículo': ar, 'Producto': pr, 'Unidades': ud, 'OBS1': '', 'Descuento': '0%', 'Mes': +fe.slice(5, 7), 'Lote': lote, 'Fecha Vto': '' }; }
   for (var mo = 1; mo <= 6; mo++) {
     var f = (function (m) { return function (d) { return '2026-' + pad(m) + '-' + pad(d); }; })(mo);
     db.MOVIMIENTOS.push(
