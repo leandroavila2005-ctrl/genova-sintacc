@@ -74,7 +74,6 @@
 
     $('month-btn').addEventListener('click', function (e) { e.stopPropagation(); toggleMonth(); });
     document.addEventListener('click', function () { if (state.monthOpen) { state.monthOpen = false; $('month-menu').classList.add('is-hidden'); } });
-    $('modal-root').addEventListener('click', function (e) { if (e.target === this) closeModal(); });
 
     buildNav();
 
@@ -1081,8 +1080,10 @@
   function pdfPGP() {
     var esc = escapeHtml;
     var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
-    var rows = (state.mpprod.prod.rows || []).filter(function (r) { return inPeriod(r['Fecha']); })
-      .sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
+    var rows = (state.mpprod.prod.rows || []).filter(function (r) {
+      var ob = String(r['OBS1'] || '').trim().toUpperCase();
+      return inPeriod(r['Fecha']) && ob !== 'SF' && ob !== 'SI';
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
     function kgEnv(prod) { var m = productosLista().filter(function (p) { return p['Producto'] === prod; })[0]; return m ? toNum(m['Kg por envase']) : 0; }
     var body = rows.length
       ? rows.map(function (r) {
@@ -1659,7 +1660,28 @@
         o.classList.add('is-active');
       });
     });
+    makeModalDraggable(root.querySelector('.gv-modal'), root.querySelector('.gv-modal-head'));
     drawIcons();
+  }
+
+  // Permite arrastrar la ventana por su encabezado (mouse y touch). No se cierra al clickear afuera.
+  function makeModalDraggable(modal, handle) {
+    if (!modal || !handle) return;
+    var dx = 0, dy = 0, sx = 0, sy = 0, dragging = false;
+    handle.style.cursor = 'move';
+    handle.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('#modal-x')) return;
+      dragging = true; sx = e.clientX; sy = e.clientY; e.preventDefault();
+      try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    handle.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      modal.style.transform = 'translate(' + (dx + e.clientX - sx) + 'px,' + (dy + e.clientY - sy) + 'px)';
+    });
+    handle.addEventListener('pointerup', function (e) {
+      if (!dragging) return; dragging = false;
+      dx += e.clientX - sx; dy += e.clientY - sy;
+    });
   }
 
   function closeModal() { $('modal-root').classList.add('is-hidden'); $('modal-root').innerHTML = ''; }
