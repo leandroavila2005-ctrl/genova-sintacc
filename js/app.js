@@ -664,6 +664,8 @@
   }
   function rowByNum(n) { n = Number(n); return (state.ventas.rows || []).filter(function (r) { return r._row === n; })[0] || null; }
 
+  function precioDe(prod) { var p = productosLista().filter(function (x) { return x['Producto'] === prod; })[0]; return p ? toNum(p['Precio']) : 0; }
+
   function openVentaModal(row) {
     // Stock por lote: necesitamos producción cargada para saber qué productos/lotes tienen stock.
     if (state.mpprod.prod.rows == null) {
@@ -680,26 +682,35 @@
       return '<option value="' + escapeHtml(n) + '"' + (n === curCliente ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
     }).join('');
 
-    var prods = productosConStock();
-    var curProd = (row && row['Producto']) || '';
-    if (curProd && prods.indexOf(curProd) < 0) prods = [curProd].concat(prods); // editar: conservar el producto de la venta
-    var prodOpts = '<option value="">— elegí un producto —</option>' + prods.map(function (n) {
-      return '<option value="' + escapeHtml(n) + '"' + (n === curProd ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
-    }).join('');
+    // Líneas de venta (varios productos). En edición, una sola línea (la fila).
+    var lineas = ed
+      ? [{ producto: row['Producto'] || '', lote: row['Lote'] || '', cant: (row['Cantidad'] == null ? '' : String(row['Cantidad'])) }]
+      : [{ producto: '', lote: '', cant: '' }];
+
+    function prodOptsWith(sel) {
+      var ps = productosConStock();
+      if (sel && ps.indexOf(sel) < 0) ps = [sel].concat(ps);
+      return '<option value="">— producto —</option>' + ps.map(function (n) {
+        return '<option value="' + escapeHtml(n) + '"' + (n === sel ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+      }).join('');
+    }
+    function loteOptsFor(prod, sel) {
+      var lotes = prod ? lotesConStock(prod) : [];
+      if (prod && sel && !lotes.some(function (l) { return l.lote === sel; })) lotes = [{ lote: sel, stock: loteStock(prod, sel), vto: '' }].concat(lotes);
+      return lotes.length
+        ? lotes.map(function (l) { return '<option value="' + escapeHtml(l.lote) + '"' + (l.lote === sel ? ' selected' : '') + '>' + escapeHtml(l.lote) + ' · stock ' + num(l.stock) + (l.vto ? ' · vto ' + escapeHtml(l.vto) : '') + '</option>'; }).join('')
+        : '<option value="">— sin stock —</option>';
+    }
 
     var body =
       '<div class="form-grid g-2">' +
         fld('Fecha', '<input id="f-fecha" class="fld-input" placeholder="14/03 o 14/03/2026" value="' + escapeHtml(ed ? isoToInput(row['Fecha']) : '') + '"><div class="fld-err" id="e-fecha"></div>') +
         fld('Cliente', '<select id="f-cliente" class="fld-input">' + clientOpts + '</select><div class="fld-err" id="e-cliente"></div>') +
       '</div>' +
-      '<div class="form-grid g-2">' +
-        fld('Producto', '<select id="f-vprod" class="fld-input">' + prodOpts + '</select><div class="fld-err" id="e-vprod"></div>') +
-        fld('Envase / Lote', '<select id="f-vlote" class="fld-input"></select><div class="fld-err" id="e-vlote"></div>') +
-      '</div>' +
-      '<div class="form-grid g-2">' +
-        fld('Cantidad', '<input id="f-vcant" class="fld-input" inputmode="decimal" placeholder="0" value="' + escapeHtml(ed ? (row['Cantidad'] == null ? '' : String(row['Cantidad'])) : '') + '"><div class="fld-err" id="e-vcant"></div>') +
-        '<div class="vta-total" style="margin-bottom:0;"><span class="vta-total-lbl">Total</span><span class="vta-total-val" id="f-vtotal">$0</span></div>' +
-      '</div>' +
+      '<div class="vlinea-head"><div>Producto</div><div>Envase / Lote</div><div>Cant.</div><div style="text-align:right;">Subtotal</div><div></div></div>' +
+      '<div id="vlineas"></div>' +
+      (ed ? '' : '<button type="button" class="v-addline" id="v-addline">+ Agregar producto</button>') +
+      '<div class="vta-total"><span class="vta-total-lbl">Total de la venta</span><span class="vta-total-val" id="f-vtotal">$0</span></div>' +
       '<div class="form-grid g-3" style="margin-bottom:0;">' +
         fld('Efectivo', moneyInput('f-efvo', row && row['EFVO'])) +
         fld('Tarjeta', moneyInput('f-tarj', row && row['Tarj o cta'])) +
@@ -713,60 +724,109 @@
       onSave: function (btn) { saveVenta(btn, ed ? row._row : null); }
     });
 
-    var curLote = (row && row['Lote']) || '';
-    function fillLotes() {
-      var lotes = lotesConStock($('f-vprod').value);
-      if (ed && curProd === $('f-vprod').value && curLote && !lotes.some(function (l) { return l.lote === curLote; })) {
-        lotes = [{ lote: curLote, stock: loteStock(curProd, curLote), vto: '' }].concat(lotes);
-      }
-      $('f-vlote').innerHTML = lotes.length
-        ? lotes.map(function (l) { return '<option value="' + escapeHtml(l.lote) + '"' + (l.lote === curLote ? ' selected' : '') + '>' + escapeHtml(l.lote) + ' · stock ' + num(l.stock) + (l.vto ? ' · vto ' + escapeHtml(l.vto) : '') + '</option>'; }).join('')
-        : '<option value="">— sin lotes con stock —</option>';
+    function syncFromDom() {
+      lineas = [];
+      Array.prototype.forEach.call(document.querySelectorAll('#vlineas .vlinea'), function (rowEl) {
+        var p = rowEl.querySelector('.vl-prod'); if (!p) return;
+        lineas.push({
+          producto: p.value,
+          lote: (rowEl.querySelector('.vl-lote') || {}).value || '',
+          cant: (rowEl.querySelector('.vl-cant') || {}).value || ''
+        });
+      });
+      if (!lineas.length) lineas = [{ producto: '', lote: '', cant: '' }];
     }
-    function vprecio() { var p = productosLista().filter(function (x) { return x['Producto'] === $('f-vprod').value; })[0]; return p ? toNum(p['Precio']) : 0; }
-    function recalc() { $('f-vtotal').textContent = money(vprecio() * toNum($('f-vcant').value)); }
-    $('f-vprod').addEventListener('change', function () { fillLotes(); recalc(); });
-    $('f-vcant').addEventListener('input', recalc);
-    fillLotes();
-    recalc();
+    function recalc() {
+      var grand = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('#vlineas .vlinea'), function (rowEl) {
+        var prod = (rowEl.querySelector('.vl-prod') || {}).value || '';
+        var cant = toNum((rowEl.querySelector('.vl-cant') || {}).value);
+        var sub = precioDe(prod) * cant;
+        var subEl = rowEl.querySelector('.vl-sub'); if (subEl) subEl.textContent = money(sub);
+        grand += sub;
+      });
+      $('f-vtotal').textContent = money(grand);
+    }
+    function renderLineas() {
+      $('vlineas').innerHTML = lineas.map(function (L, i) {
+        return '<div class="vlinea" data-i="' + i + '">' +
+          '<select class="fld-input vl-prod" data-i="' + i + '">' + prodOptsWith(L.producto) + '</select>' +
+          '<select class="fld-input vl-lote" data-i="' + i + '">' + loteOptsFor(L.producto, L.lote) + '</select>' +
+          '<input class="fld-input mono vl-cant" data-i="' + i + '" inputmode="decimal" placeholder="0" value="' + escapeHtml(L.cant) + '">' +
+          '<span class="vl-sub mono"></span>' +
+          (lineas.length > 1 ? '<button type="button" class="vl-del" data-i="' + i + '" title="Quitar">✕</button>' : '<span></span>') +
+        '</div>';
+      }).join('');
+      Array.prototype.forEach.call(document.querySelectorAll('#vlineas .vl-prod'), function (el) {
+        el.addEventListener('change', function () { syncFromDom(); renderLineas(); recalc(); });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('#vlineas .vl-cant'), function (el) {
+        el.addEventListener('input', recalc);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('#vlineas .vl-del'), function (el) {
+        el.addEventListener('click', function () { syncFromDom(); lineas.splice(Number(el.getAttribute('data-i')), 1); renderLineas(); recalc(); });
+      });
+      recalc();
+    }
+    renderLineas();
+    var add = $('v-addline');
+    if (add) add.addEventListener('click', function () { syncFromDom(); lineas.push({ producto: '', lote: '', cant: '' }); renderLineas(); recalc(); });
   }
 
   function saveVenta(btn, rowNum) {
     var fecha = $('f-fecha').value.trim();
     var cliente = $('f-cliente').value;
-    var producto = $('f-vprod').value;
-    var lote = $('f-vlote') ? $('f-vlote').value : '';
-    var cant = toNum($('f-vcant').value);
     var ok = true;
     var fechaN = normalizeFecha(fecha);
     if (!fechaN) { fieldError('f-fecha', 'e-fecha', 'Fecha DD/MM o DD/MM/AAAA'); ok = false; } else fieldOk('f-fecha', 'e-fecha');
     if (!cliente) { fieldError('f-cliente', 'e-cliente', 'Elegí un cliente'); ok = false; } else fieldOk('f-cliente', 'e-cliente');
-    if (!producto) { fieldError('f-vprod', 'e-vprod', 'Elegí un producto'); ok = false; } else fieldOk('f-vprod', 'e-vprod');
-    if (!lote) { fieldError('f-vlote', 'e-vlote', 'Elegí el lote'); ok = false; } else fieldOk('f-vlote', 'e-vlote');
-    if (!(cant > 0)) { fieldError('f-vcant', 'e-vcant', 'Cantidad mayor a 0'); ok = false; } else fieldOk('f-vcant', 'e-vcant');
     if (!ok) return;
 
-    var existing = rowNum ? ((state.ventas.rows || []).filter(function (r) { return r._row === rowNum; })[0] || {}) : {};
-    // Categoría: del canal del cliente elegido (cae al valor previo si el cliente no está en la lista).
-    var cmatch = ((state.lists && state.lists.canales) || []).filter(function (x) { return x['Nombre'] === cliente; })[0];
-    var cat = cmatch ? (cmatch['Categoría'] || '') : (existing['cat'] || '');
-    // Precio congelado: si en edición no cambió producto ni cantidad, se respeta el total ya cerrado.
-    var same = rowNum && existing['Producto'] === producto && toNum(existing['Cantidad']) === cant;
-    var pmatch = productosLista().filter(function (x) { return x['Producto'] === producto; })[0];
-    var precio = same ? toNum(existing['Precio unit']) : (pmatch ? toNum(pmatch['Precio']) : 0);
-    var totalVenta = same ? toNum(existing['Total venta']) : cant * precio;
+    // Leer las líneas del DOM
+    var lns = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#vlineas .vlinea'), function (rowEl) {
+      var p = rowEl.querySelector('.vl-prod'); if (!p) return;
+      lns.push({ producto: p.value, lote: (rowEl.querySelector('.vl-lote') || {}).value || '', cant: toNum((rowEl.querySelector('.vl-cant') || {}).value) });
+    });
+    if (!lns.length || lns.some(function (L) { return !L.producto || !L.lote || !(L.cant > 0); })) {
+      toast('Completá producto, lote y cantidad (>0) en cada línea', true); return;
+    }
 
-    var record = {
-      'Fecha': fechaN, 'Lista/Canal': cliente, 'cat': cat,
-      'Producto': producto, 'Lote': lote, 'Cantidad': cant, 'Precio unit': precio, 'Total venta': totalVenta,
-      'EFVO': toNum($('f-efvo').value), 'Tarj o cta': toNum($('f-tarj').value), 'MP': toNum($('f-cuenta').value)
-    };
+    var cmatch = ((state.lists && state.lists.canales) || []).filter(function (x) { return x['Nombre'] === cliente; })[0];
+    var pago = { EFVO: toNum($('f-efvo').value), 'Tarj o cta': toNum($('f-tarj').value), MP: toNum($('f-cuenta').value) };
     setBtnLoading(btn, true, rowNum ? 'Guardar cambios' : 'Guardar venta');
-    var op = rowNum ? Api.update('VENTAS', rowNum, record) : Api.create('VENTAS', record);
-    op.then(function () {
-      closeModal();
-      toast(rowNum ? 'Venta actualizada' : 'Venta guardada');
-      loadVentas(true);
+
+    if (rowNum) {
+      // Edición: una sola línea, actualiza la fila. Respeta total congelado si no cambió producto/cantidad.
+      var existing = (state.ventas.rows || []).filter(function (r) { return r._row === rowNum; })[0] || {};
+      var cat = cmatch ? (cmatch['Categoría'] || '') : (existing['cat'] || '');
+      var L = lns[0];
+      var same = existing['Producto'] === L.producto && toNum(existing['Cantidad']) === L.cant;
+      var precio = same ? toNum(existing['Precio unit']) : precioDe(L.producto);
+      var total = same ? toNum(existing['Total venta']) : L.cant * precio;
+      var rec = {
+        'Fecha': fechaN, 'Lista/Canal': cliente, 'cat': cat, 'Producto': L.producto, 'Lote': L.lote,
+        'Cantidad': L.cant, 'Precio unit': precio, 'Total venta': total,
+        'EFVO': pago.EFVO, 'Tarj o cta': pago['Tarj o cta'], 'MP': pago.MP
+      };
+      Api.update('VENTAS', rowNum, rec).then(function () {
+        closeModal(); toast('Venta actualizada'); loadVentas(true);
+      }).catch(function (err) { setBtnLoading(btn, false); toast(err.message, true); });
+      return;
+    }
+
+    // Alta: una fila por línea; el pago va en la primera (para no duplicar el total).
+    var cat2 = cmatch ? (cmatch['Categoría'] || '') : '';
+    var recs = lns.map(function (L, i) {
+      var precio = precioDe(L.producto);
+      return {
+        'Fecha': fechaN, 'Lista/Canal': cliente, 'cat': cat2, 'Producto': L.producto, 'Lote': L.lote,
+        'Cantidad': L.cant, 'Precio unit': precio, 'Total venta': L.cant * precio,
+        'EFVO': i === 0 ? pago.EFVO : 0, 'Tarj o cta': i === 0 ? pago['Tarj o cta'] : 0, 'MP': i === 0 ? pago.MP : 0
+      };
+    });
+    Promise.all(recs.map(function (r) { return Api.create('VENTAS', r); })).then(function () {
+      closeModal(); toast(recs.length > 1 ? 'Venta guardada (' + recs.length + ' productos)' : 'Venta guardada'); loadVentas(true);
     }).catch(function (err) { setBtnLoading(btn, false); toast(err.message, true); });
   }
 
