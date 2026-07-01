@@ -1423,7 +1423,7 @@
     });
     if (rows.length === 0) return emptyHtml('utensils', 'Sin producción este mes', 'No hay producción para este filtro.');
     var head = '<div class="dt-head"><div>Fecha</div><div>Categoría</div><div>Artículo</div><div>Producto</div>' +
-      '<div class="r-right">Unidades producidas</div><div>OBS</div><div class="r-right">Descuento</div><div></div></div>';
+      '<div class="r-right">Unidades producidas</div><div>OBS</div><div class="r-center">Receta</div><div class="r-right">Descuento</div><div></div></div>';
     var trs = rows.map(function (r) {
       return '<div class="dt-row">' +
         '<div class="date" style="font-size:12px;">' + isoToShort(r['Fecha']) + '</div>' +
@@ -1435,6 +1435,7 @@
         '</div>' +
         '<div class="num strong">' + num(r['Unidades']) + '</div>' +
         '<div class="text-3" style="font-size:12px;">' + escapeHtml(r['OBS1'] || '—') + '</div>' +
+        '<div class="r-center"><span class="tag-consumo" data-consumo="' + r._row + '">Receta</span></div>' +
         '<div class="num muted">' + escapeHtml(String(r['Descuento'] == null ? '' : r['Descuento'])) + '</div>' +
         rowActionsHtml(r._row) + '</div>';
     }).join('');
@@ -1511,6 +1512,13 @@
     });
     Array.prototype.forEach.call(v.querySelectorAll('[data-del]'), function (el) {
       el.addEventListener('click', function () { deleteMpProd(kind, Number(el.getAttribute('data-del'))); });
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-consumo]'), function (el) {
+      el.addEventListener('click', function () {
+        var n = Number(el.getAttribute('data-consumo'));
+        var row = (state.mpprod.prod.rows || []).filter(function (r) { return r._row === n; })[0] || null;
+        if (row) openConsumoModal(row);
+      });
     });
   }
 
@@ -1882,6 +1890,7 @@
   }
   function openRecetaModal(prodRow) {
     var producto = prodRow['Producto'] || '', kg = prodRow['Kg por envase'];
+    var nombreProd = ((prodRow['Artículo'] ? prodRow['Artículo'] + ' ' : '') + producto).trim();
     if (!insumosLista().length) { toast('Primero cargá materias primas en Configuración', true); return; }
     showLoader(true);
     Api.list('Recetas').then(function (rows) {
@@ -1898,7 +1907,7 @@
         '<div id="rec-lines"></div>' +
         '<button class="btn btn-secondary" id="rec-add" style="margin-top:10px;"><span class="ico"><i data-lucide="plus"></i></span>Agregar materia prima</button>';
       openModal({
-        title: 'RECETA de ' + producto,
+        title: 'RECETA de ' + nombreProd,
         body: body,
         saveLabel: 'Guardar receta',
         onSave: function (btn) { saveReceta(btn); }
@@ -1924,6 +1933,96 @@
     var rec = { 'Producto': recetaCtx.producto, 'Kg por envase': (recetaCtx.kg == null ? '' : recetaCtx.kg), 'Ingredientes': JSON.stringify(ings) };
     var op = recetaCtx.row ? Api.update('Recetas', recetaCtx.row, rec) : Api.create('Recetas', rec);
     op.then(function () { closeModal(); toast('Receta guardada'); })
+      .catch(function (err) { setBtnLoading(btn, false, 'Guardar receta'); toast(err.message, true); });
+  }
+
+  /* ------------------- receta estampada por producción (consumo) ------------------- */
+  var consumoCtx = null;
+
+  function prodKey(r) {
+    return String(r['reqId'] || ('P|' + (r['Producto'] || '') + '|' + (r['Lote'] || '') + '|' + (r['Fecha'] || '')));
+  }
+  function mpLoteOptions(mpRows, insumoCod, insumoNom, selRef) {
+    var matches = mpRows.filter(function (m) {
+      return (insumoCod && String(m['ID insumo'] || '') === insumoCod) || (insumoNom && String(m['Nombre'] || '') === insumoNom);
+    });
+    var opts = matches.length ? matches : mpRows;
+    var html = '<option value="">Elegir lote…</option>';
+    html += opts.map(function (m) {
+      var ref = String(m['reqId'] || m._row);
+      var label = (m['Nombre'] || '') + ' · Lote ' + (m['Lote'] || '—') + (m['Proveedor'] ? ' (' + m['Proveedor'] + ')' : '');
+      return '<option value="' + escapeHtml(ref) + '"' + (ref === selRef ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+    }).join('');
+    return html;
+  }
+  function renderConsLines() {
+    var host = $('cons-lines'); if (!host || !consumoCtx) return;
+    host.innerHTML = consumoCtx.lines.map(function (ln, idx) {
+      return '<div class="cons-line" data-i="' + idx + '">' +
+        '<div class="cons-mp">' + escapeHtml(ln.nombre || ln.insumo || '—') + '</div>' +
+        '<div class="cons-val mono">' + num(ln.valor) + ' g</div>' +
+        '<select class="fld-input fld-select cons-lote">' + mpLoteOptions(consumoCtx.mp, ln.insumo, ln.nombre, ln.mpRef || '') + '</select>' +
+        '</div>';
+    }).join('');
+  }
+  function collectConsLines() {
+    var host = $('cons-lines'); if (!host || !consumoCtx) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.cons-line'), function (row) {
+      var i = Number(row.getAttribute('data-i'));
+      var ref = row.querySelector('.cons-lote').value;
+      var mp = consumoCtx.mp.filter(function (m) { return String(m['reqId'] || m._row) === ref; })[0] || null;
+      consumoCtx.lines[i].mpRef = ref;
+      consumoCtx.lines[i].lote = mp ? (mp['Lote'] || '') : '';
+      consumoCtx.lines[i].proveedor = mp ? (mp['Proveedor'] || '') : '';
+    });
+  }
+  function openConsumoModal(prodRow) {
+    var producto = prodRow['Producto'] || '';
+    var nombreProd = ((prodRow['Artículo'] ? prodRow['Artículo'] + ' ' : '') + producto).trim();
+    var units = toNum(prodRow['Unidades']);
+    var key = prodKey(prodRow);
+    showLoader(true);
+    Promise.all([Api.list('Recetas'), Api.list('MP'), Api.list('RecetasProd')]).then(function (res) {
+      showLoader(false);
+      var recetas = res[0] || [], mpRows = res[1] || [], recProd = res[2] || [];
+      var stamped = recProd.filter(function (r) { return String(r['reqId prod']) === key; })[0] || null;
+      var lines;
+      if (stamped && stamped['Ingredientes']) {
+        var st = []; try { st = JSON.parse(stamped['Ingredientes']) || []; } catch (e) { st = []; }
+        lines = st.map(function (g) { return { insumo: g.insumo || '', nombre: g.nombre || '', gr: g.gr, valor: g.valor, mpRef: g.mpRef || '', lote: g.lote || '', proveedor: g.proveedor || '' }; });
+      } else {
+        var base = recetas.filter(function (r) { return r['Producto'] === producto; })[0] || null;
+        var ings = [];
+        if (base && base['Ingredientes']) { try { ings = JSON.parse(base['Ingredientes']) || []; } catch (e2) { ings = []; } }
+        lines = ings.map(function (g) { var gr = toNum(g.gr); return { insumo: g.insumo || '', nombre: g.nombre || '', gr: gr, valor: gr * units, mpRef: '', lote: '', proveedor: '' }; });
+      }
+      if (!lines.length) { toast('El producto no tiene receta cargada en Configuración', true); return; }
+      consumoCtx = { lines: lines, mp: mpRows, key: key, producto: producto, lote: prodRow['Lote'] || '', row: stamped ? stamped._row : null };
+
+      var body =
+        '<div class="cfg-sub" style="margin-bottom:14px;">Consumo para ' + escapeHtml(num(units)) + ' unidad(es)' + (stamped ? ' · <b>receta estampada</b>' : '') + '</div>' +
+        '<div class="cons-head"><div>Materia prima</div><div class="r-right">Consumo</div><div>Lote / insumo usado</div></div>' +
+        '<div id="cons-lines"></div>';
+      openModal({
+        title: nombreProd,
+        body: body,
+        saveLabel: 'Guardar receta',
+        onSave: function (btn) { saveConsumo(btn); }
+      });
+      renderConsLines();
+      drawIcons();
+    }).catch(function (err) { showLoader(false); toast(err.message, true); });
+  }
+  function saveConsumo(btn) {
+    if (!consumoCtx) return;
+    collectConsLines();
+    var ings = consumoCtx.lines.map(function (ln) {
+      return { insumo: ln.insumo, nombre: ln.nombre, gr: ln.gr, valor: ln.valor, mpRef: ln.mpRef || '', lote: ln.lote || '', proveedor: ln.proveedor || '' };
+    });
+    setBtnLoading(btn, true, 'Guardar receta');
+    var rec = { 'reqId prod': consumoCtx.key, 'Producto': consumoCtx.producto, 'Lote': consumoCtx.lote, 'Ingredientes': JSON.stringify(ings) };
+    var op = consumoCtx.row ? Api.update('RecetasProd', consumoCtx.row, rec) : Api.create('RecetasProd', rec);
+    op.then(function () { closeModal(); toast('Receta de producción guardada'); })
       .catch(function (err) { setBtnLoading(btn, false, 'Guardar receta'); toast(err.message, true); });
   }
 
