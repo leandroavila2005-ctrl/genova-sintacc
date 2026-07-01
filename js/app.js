@@ -17,7 +17,7 @@
     ventas: { rows: null, filter: 'Todos', query: '' },
     mov: { rows: null, filter: 'Todas', iva: 'Todos', query: '' },
     mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' }, stockQuery: '' },
-    precios: { query: '' },
+    precios: { query: '', edits: {} },
     config: { section: 'mp' }
   };
 
@@ -140,6 +140,10 @@
   function closeNav() { var r = document.querySelector('.app-root'); if (r) r.classList.remove('nav-open'); }
 
   function setRoute(route) {
+    if (state.route === 'precios' && route !== 'precios' && preciosDirtyCount() > 0) {
+      if (!confirm('Se perderán los cambios no guardados al salir')) return; // rechaza: se queda
+      state.precios.edits = {}; // acepta: descarta lo no guardado
+    }
     if (route !== state.route) { // al cambiar de solapa se vacían los filtros
       state.ventas.filter = 'Todos'; state.ventas.query = '';
       state.mov.filter = 'Todas'; state.mov.iva = 'Todos'; state.mov.query = '';
@@ -200,6 +204,9 @@
     drawIcons();
   }
 
+  function precioOrig(r) { return r['Precio'] == null ? '' : String(r['Precio']); }
+  function preciosDirtyCount() { return Object.keys(state.precios.edits || {}).length; }
+
   function renderPrecios() {
     var all = productosLista();
     var admin = isAdmin();
@@ -211,7 +218,10 @@
     });
     var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
       '<span class="ico"><i data-lucide="search"></i></span>' +
-      '<input id="precios-search" placeholder="Buscar producto…" value="' + escapeHtml(state.precios.query) + '"></div></div>';
+      '<input id="precios-search" placeholder="Buscar producto…" value="' + escapeHtml(state.precios.query) + '"></div>' +
+      '<button class="btn btn-secondary" id="precios-pdf" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>Lista de precios</button>' +
+      (admin ? '<button class="btn btn-primary" id="precios-save" disabled><span class="ico"><i data-lucide="save"></i></span>Guardar cambios</button>' : '') +
+      '</div>';
     var body;
     if (!all.length) {
       body = emptyHtml('tag', 'Sin productos', 'Cargá productos en Configuración → Productos terminados.');
@@ -219,12 +229,16 @@
       body = search + emptyHtml('tag', 'Sin resultados', 'Probá con otro término de búsqueda.');
     } else {
       var note = admin
-        ? '<div class="cfg-sub" style="margin-bottom:14px;">Editá el precio de cada producto; se guarda al salir del campo.</div>'
+        ? '<div class="cfg-sub" style="margin-bottom:14px;">Editá los precios y presioná «Guardar cambios». Los campos modificados se marcan en rojo.</div>'
         : '<div class="notice notice-info" style="margin-bottom:14px;"><span class="ico" style="width:16px;height:16px;"><i data-lucide="lock-keyhole"></i></span>Sólo un administrador puede editar los precios.</div>';
       var head = '<div class="dt-head"><div>Categoría</div><div>Artículo</div><div>Producto</div><div class="r-right">Precio</div></div>';
+      var edits = state.precios.edits || {};
       var trs = rows.map(function (r) {
+        var edited = edits[r._row] !== undefined;
+        var val = edited ? edits[r._row] : precioOrig(r);
+        var dirty = edited && String(edits[r._row]) !== precioOrig(r) ? ' is-dirty' : '';
         var precioCell = admin
-          ? '<input class="fld-input mono precio-input" data-row="' + r._row + '" inputmode="decimal" value="' + escapeHtml(r['Precio'] == null ? '' : String(r['Precio'])) + '">'
+          ? '<input class="fld-input mono precio-input' + dirty + '" data-row="' + r._row + '" inputmode="decimal" value="' + escapeHtml(val) + '">'
           : '<span class="num strong">' + (r['Precio'] ? money(r['Precio']) : '—') + '</span>';
         return '<div class="dt-row">' +
           '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
@@ -242,21 +256,63 @@
       renderPrecios();
       var ns = $('precios-search'); if (ns) { ns.focus(); ns.setSelectionRange(ns.value.length, ns.value.length); }
     });
+    var pdf = $('precios-pdf'); if (pdf) pdf.onclick = pdfListaPrecios;
     if (admin) {
+      var updateSaveBtn = function () { var b = $('precios-save'); if (b) b.disabled = preciosDirtyCount() === 0; };
+      updateSaveBtn();
       Array.prototype.forEach.call($('view').querySelectorAll('.precio-input'), function (el) {
-        el.addEventListener('change', function () { savePrecio(Number(el.getAttribute('data-row')), el.value); });
+        var rowNum = Number(el.getAttribute('data-row'));
+        var orig = precioOrig((productosLista().filter(function (r) { return r._row === rowNum; })[0]) || {});
+        el.addEventListener('input', function () {
+          if (el.value === orig) delete state.precios.edits[rowNum];
+          else state.precios.edits[rowNum] = el.value;
+          el.classList.toggle('is-dirty', el.value !== orig);
+          updateSaveBtn();
+        });
       });
+      var sb = $('precios-save'); if (sb) sb.onclick = function () { savePreciosAll(sb); };
     }
     drawIcons();
   }
 
-  function savePrecio(rowNum, raw) {
-    var precio = toNum(raw);
-    Api.update('ListaProd', rowNum, { 'Precio': precio }).then(function () {
-      var p = productosLista().filter(function (r) { return r._row === rowNum; })[0];
-      if (p) p['Precio'] = precio;
-      toast('Precio actualizado');
-    }).catch(function (err) { toast(err.message, true); });
+  function savePreciosAll(btn) {
+    var edits = state.precios.edits || {}, keys = Object.keys(edits);
+    if (!keys.length) return;
+    setBtnLoading(btn, true, 'Guardar cambios');
+    Promise.all(keys.map(function (k) {
+      var rowNum = Number(k), precio = toNum(edits[k]);
+      return Api.update('ListaProd', rowNum, { 'Precio': precio }).then(function () {
+        var p = productosLista().filter(function (r) { return r._row === rowNum; })[0];
+        if (p) p['Precio'] = precio;
+      });
+    })).then(function () {
+      state.precios.edits = {};
+      toast('Precios guardados');
+      renderPrecios();
+    }).catch(function (err) { setBtnLoading(btn, false, 'Guardar cambios'); toast(err.message, true); });
+  }
+
+  // PDF: Lista de precios de productos, ordenada por categoría/artículo/producto.
+  function pdfListaPrecios() {
+    var esc = escapeHtml;
+    var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
+    var rows = productosLista().slice().sort(function (a, b) {
+      return (String(a['Categoría'] || '') + String(a['Artículo'] || '') + String(a['Producto'] || ''))
+        .localeCompare(String(b['Categoría'] || '') + String(b['Artículo'] || '') + String(b['Producto'] || ''));
+    });
+    var body = rows.length
+      ? rows.map(function (r) {
+          return '<tr>' +
+            '<td>' + esc(r['Categoría'] || '') + '</td>' +
+            '<td>' + esc(r['Artículo'] || '') + '</td>' +
+            '<td>' + esc(r['Producto'] || '') + '</td>' +
+            '<td class="num">' + (r['Precio'] ? money(r['Precio']) : '—') + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="4" class="empty">Sin productos cargados.</td></tr>';
+    var section = '<section class="poe"><h2>Lista de precios</h2>' +
+      '<table><thead><tr><th>Categoría</th><th>Artículo</th><th>Producto</th><th class="num">Precio</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></section>';
+    openPrintDoc('Lista de precios · ' + mesNom + ' ' + anio, 'Lista de precios · ' + mesNom + ' ' + anio, section);
   }
 
   function loadingView() {
@@ -1677,7 +1733,7 @@
   /* ----------------------------- configuración ----------------------------- */
   var CFG_SECTIONS = [
     { key: 'mp',    label: 'Materias primas',      icon: 'wheat-off',       sheet: 'ListaMP',   listKey: 'insumos',   cols: ['Código', 'Nombre', 'Categoría'],            sub: 'Lista maestra de insumos',   add: 'Agregar insumo' },
-    { key: 'prod',  label: 'Productos terminados', icon: 'utensils',        sheet: 'ListaProd', listKey: 'productos',  cols: ['Categoría', 'Artículo', 'Producto', 'Modelo de loteo', 'Kg por envase', 'Precio'], sub: 'Catálogo de pastas', add: 'Agregar producto' },
+    { key: 'prod',  label: 'Productos terminados', icon: 'utensils',        sheet: 'ListaProd', listKey: 'productos',  cols: ['Categoría', 'Artículo', 'Producto', 'Modelo de loteo', 'Kg por envase'], sub: 'Catálogo de pastas · el precio se edita en la solapa Precios', add: 'Agregar producto' },
     { key: 'mov',   label: 'Tipos de movimiento',  icon: 'arrow-left-right', sheet: 'Glosario',  listKey: 'glosario',   cols: ['Concepto', 'Clasificación', 'Aplica IVA'],   sub: 'Clasificaciones de gasto',   add: 'Agregar tipo' },
     { key: 'cli',   label: 'Clientes y canales',   icon: 'store',           sheet: 'Listas',    listKey: 'canales',    cols: ['Nombre', 'Categoría', 'Vigencia'],           sub: 'Cuentas y canales de venta', add: 'Agregar cliente' },
     { key: 'users', label: 'Usuarios autorizados', icon: 'users',           sheet: 'Usuarios',  listKey: 'usuarios',   cols: ['Email', 'Rol'],                              sub: 'Cuentas con acceso a la app', add: 'Invitar usuario' }
