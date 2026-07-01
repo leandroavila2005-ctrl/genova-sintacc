@@ -306,11 +306,12 @@
             '<td>' + esc(r['Categoría'] || '') + '</td>' +
             '<td>' + esc(r['Artículo'] || '') + '</td>' +
             '<td>' + esc(r['Producto'] || '') + '</td>' +
+            '<td class="num">' + (r['Kg por envase'] != null && r['Kg por envase'] !== '' ? esc(String(r['Kg por envase'])) : '—') + '</td>' +
             '<td class="num">' + (r['Precio'] ? money(r['Precio']) : '—') + '</td></tr>';
         }).join('')
-      : '<tr><td colspan="4" class="empty">Sin productos cargados.</td></tr>';
+      : '<tr><td colspan="5" class="empty">Sin productos cargados.</td></tr>';
     var section = '<section class="poe"><h2>Lista de precios</h2>' +
-      '<table><thead><tr><th>Categoría</th><th>Artículo</th><th>Producto</th><th class="num">Precio</th></tr></thead>' +
+      '<table><thead><tr><th>Categoría</th><th>Artículo</th><th>Producto</th><th class="num">Kg por envase</th><th class="num">Precio</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></section>';
     openPrintDoc('Lista de precios · ' + mesNom + ' ' + anio, 'Lista de precios · ' + mesNom + ' ' + anio, section);
   }
