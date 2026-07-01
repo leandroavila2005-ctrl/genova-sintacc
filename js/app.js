@@ -12,6 +12,8 @@
     lists: null,       // listas maestras
     period: { anio: null, mes: null },
     dash: null,        // datasets del año
+    dashAnnual: false, // vista anual (todo el año vs. año anterior)
+    dashPrev: null, dashPrevYear: null, // dataset del año anterior para comparar
     route: 'dashboard',
     monthOpen: false,
     ventas: { rows: null, filter: 'Todos', query: '' },
@@ -416,7 +418,7 @@
   }
   function movSum(rows, clasif, mes) {
     return rows.reduce(function (a, r) {
-      if (Number(r['MES']) !== mes) return a;
+      if (mes != null && Number(r['MES']) !== mes) return a;
       if (String(r['Clasif']) !== clasif) return a;
       return a + toNum(r['Monto']);
     }, 0);
@@ -426,7 +428,7 @@
     var ventas = d.ventas || [], movs = d.movimientos || [], mp = d.mp || [], prod = d.prod || [];
 
     var ventasMes = sumBy(ventas, 'Totales', mes);
-    var ventasAcum = ventas.reduce(function (a, r) { return Number(r['MES']) <= mes ? a + toNum(r['Totales']) : a; }, 0);
+    var ventasAcum = mes == null ? ventasMes : ventas.reduce(function (a, r) { return Number(r['MES']) <= mes ? a + toNum(r['Totales']) : a; }, 0);
 
     var mpMes = sumBy(mp, 'Total', mes, 'Mes');
     var sueldos = movSum(movs, 'Sueldos', mes);
@@ -448,13 +450,13 @@
 
     // producción por artículo
     var byArt = {};
-    prod.forEach(function (r) { if (Number(r['Mes']) === mes) { var k = r['Artículo'] || '—'; byArt[k] = (byArt[k] || 0) + toNum(r['Unidades']); } });
+    prod.forEach(function (r) { if (mes == null || Number(r['Mes']) === mes) { var k = r['Artículo'] || '—'; byArt[k] = (byArt[k] || 0) + toNum(r['Unidades']); } });
     var prodArr = Object.keys(byArt).map(function (k) { return { name: k, val: byArt[k] }; }).sort(function (a, b) { return b.val - a.val; });
     var prodTotal = prodArr.reduce(function (a, x) { return a + x.val; }, 0);
 
     // canal dominante (por Totales)
     var byCat = {};
-    ventas.forEach(function (r) { if (Number(r['MES']) === mes) { var k = r['cat'] || '—'; byCat[k] = (byCat[k] || 0) + toNum(r['Totales']); } });
+    ventas.forEach(function (r) { if (mes == null || Number(r['MES']) === mes) { var k = r['cat'] || '—'; byCat[k] = (byCat[k] || 0) + toNum(r['Totales']); } });
     var domCat = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; })[0] || '—';
     var domPct = ventasMes ? byCat[domCat] / ventasMes : 0;
 
@@ -485,15 +487,26 @@
 
   function renderDashboard() {
     if (!state.dash) { $('view').innerHTML = '<div class="placeholder"><span class="ico"><i data-lucide="loader"></i></span><div>Cargando datos…</div></div>'; drawIcons(); return; }
-    var mes = state.period.mes;
-    var k = computeKpis(state.dash, mes);
-    var kPrev = mes > 1 ? computeKpis(state.dash, mes - 1) : null;
+    var annual = state.dashAnnual;
+    var anio = state.period.anio, mes = state.period.mes;
+    if (annual && (state.dashPrev == null || state.dashPrevYear !== anio - 1)) loadDashPrev();
 
-    var heroDelta = kPrev ? delta(k.ventasMes, kPrev.ventasMes) : { txt: '—', cls: '', ico: 'minus' };
-    var dBruto = kPrev ? deltaPP(k.margenBruto, kPrev.margenBruto) : { txt: '—', cls: 'delta-flat', ico: 'minus' };
-    var dNeto = kPrev ? deltaPP(k.margenNeto, kPrev.margenNeto) : { txt: '—', cls: 'delta-flat', ico: 'minus' };
-    var dSueldos = kPrev ? delta(k.sueldos, kPrev.sueldos) : { txt: '—', cls: 'delta-flat', ico: 'minus' };
-    var dProd = kPrev ? delta(k.prodTotal, kPrev.prodTotal) : { txt: '—', cls: 'delta-flat', ico: 'minus' };
+    var k, kPrev;
+    if (annual) {
+      k = computeKpis(state.dash, null);
+      kPrev = (state.dashPrev && state.dashPrevYear === anio - 1) ? computeKpis(state.dashPrev, null) : null;
+    } else {
+      k = computeKpis(state.dash, mes);
+      kPrev = mes > 1 ? computeKpis(state.dash, mes - 1) : null;
+    }
+    var waiting = annual && !kPrev; // esperando datos del año anterior
+    var noPrev = function (pp) { return { txt: waiting ? '…' : '—', cls: 'delta-flat', ico: 'minus' }; };
+
+    var heroDelta = kPrev ? delta(k.ventasMes, kPrev.ventasMes) : { txt: waiting ? '…' : '—', cls: '', ico: 'minus' };
+    var dBruto = kPrev ? deltaPP(k.margenBruto, kPrev.margenBruto) : noPrev();
+    var dNeto = kPrev ? deltaPP(k.margenNeto, kPrev.margenNeto) : noPrev();
+    var dSueldos = kPrev ? delta(k.sueldos, kPrev.sueldos) : noPrev();
+    var dProd = kPrev ? delta(k.prodTotal, kPrev.prodTotal) : noPrev();
 
     var minis = [
       { label: 'Margen bruto', hint: 'Ventas menos costo de producción', value: pct(k.margenBruto), d: dBruto, accent: 'bg-accent' },
@@ -503,13 +516,19 @@
       { label: 'Unidades prod.', value: num(k.prodTotal), d: dProd, accent: 'bg-primary' }
     ];
 
-    var html = '' +
+    var toggle = '<div class="tabs-segmented dash-mode" style="width:max-content; margin-bottom:18px;">' +
+      '<button class="tab-seg' + (!annual ? ' is-active' : '') + '" data-dashmode="mes">Mensual</button>' +
+      '<button class="tab-seg' + (annual ? ' is-active' : '') + '" data-dashmode="anio">Anual</button></div>';
+    var heroLabel = annual ? ('Ventas del año ' + anio) : 'Ventas del mes';
+    var heroSub = annual ? ('total del año · comparado con ' + (anio - 1)) : ('acumulado del año ' + money(k.ventasAcum) + ' · ' + MONTHS[mes - 1].toLowerCase());
+
+    var html = toggle +
       '<div class="dash-toprow">' +
         '<div class="dash-hero">' +
-          '<div class="hero-head"><div class="hero-label">Ventas del mes</div>' +
+          '<div class="hero-head"><div class="hero-label">' + heroLabel + '</div>' +
             '<div class="hero-delta ' + (heroDelta.cls === 'delta-down' ? 'down' : '') + '"><span class="ico"><i data-lucide="' + heroDelta.ico + '"></i></span>' + heroDelta.txt + '</div></div>' +
           '<div><div class="hero-value">' + money(k.ventasMes) + '</div>' +
-            '<div class="hero-sub">acumulado del año ' + money(k.ventasAcum) + ' · ' + MONTHS[mes - 1].toLowerCase() + '</div>' +
+            '<div class="hero-sub">' + heroSub + '</div>' +
             '<div class="hero-tags">' +
               '<span class="hero-tag gold">' + escapeHtml(k.domCat) + ' ' + pct(k.domPct) + '</span>' +
               '<span class="hero-tag muted">' + num(k.prodTotal) + ' u producidas</span>' +
@@ -524,8 +543,8 @@
         }).join('') + '</div>' +
       '</div>' +
       '<div class="dash-charts">' +
-        chartVentasCanal(state.dash, mes) +
-        chartMargenes(state.dash, mes) +
+        (annual ? chartVentasCanal(state.dash, 12, true) : chartVentasCanal(state.dash, mes)) +
+        (annual ? chartMargenes(state.dash, 12) : chartMargenes(state.dash, mes)) +
         chartMix(k) +
       '</div>' +
       '<div class="dash-bottom">' +
@@ -534,14 +553,33 @@
       '</div>';
 
     $('view').innerHTML = html;
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-dashmode]'), function (el) {
+      el.addEventListener('click', function () { setDashMode(el.getAttribute('data-dashmode') === 'anio'); });
+    });
     drawIcons();
   }
 
-  function chartVentasCanal(d, mes) {
-    var from = Math.max(1, mes - 5);
+  function setDashMode(annual) {
+    if (state.dashAnnual === annual) return;
+    state.dashAnnual = annual;
+    if (annual) loadDashPrev();
+    renderDashboard();
+  }
+  function loadDashPrev() {
+    var py = state.period.anio - 1;
+    if (state.dashPrev != null && state.dashPrevYear === py) return;
+    Api.dashboard(py).then(function (data) {
+      state.dashPrev = data; state.dashPrevYear = py;
+      if (state.route === 'dashboard' && state.dashAnnual) renderDashboard();
+    }).catch(function () {});
+  }
+
+  function chartVentasCanal(d, mes, annual) {
+    var from = annual ? 1 : Math.max(1, mes - 5);
+    var to = annual ? 12 : mes;
     var cols = [];
     var maxStack = 1;
-    for (var m = from; m <= mes; m++) {
+    for (var m = from; m <= to; m++) {
       var may = 0, min = 0, onl = 0;
       (d.ventas || []).forEach(function (r) {
         if (Number(r['MES']) !== m) return;
@@ -561,7 +599,7 @@
         '</div><div class="bar-label">' + c.m + '</div></div>';
     }).join('');
     return '<div class="chart-card"><div class="chart-title">Ventas por canal</div>' +
-      '<div class="chart-sub">últimos ' + cols.length + ' meses · barras apiladas</div>' +
+      '<div class="chart-sub">' + (annual ? 'los 12 meses del año' : ('últimos ' + cols.length + ' meses')) + ' · barras apiladas</div>' +
       '<div class="bars">' + bars + '</div>' +
       '<div class="chart-legend">' +
         '<span class="legend-item"><span class="legend-dot bg-ink"></span>Mayorista</span>' +
