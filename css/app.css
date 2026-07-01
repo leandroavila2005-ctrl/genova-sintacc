@@ -429,6 +429,11 @@
 .cfg-cols-5 .dt-head, .cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 72px; }
 .cfg-cols-6 .dt-head, .cfg-cols-6 .dt-row { grid-template-columns: 0.9fr 1fr 1.3fr 1fr 0.9fr 0.9fr 72px; }
 .tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 1fr 1.2fr 1.4fr 120px; }
+.cfg-list.cfg-prod.cfg-cols-5 .dt-head, .cfg-list.cfg-prod.cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 112px; }
+.rec-head { display: grid; grid-template-columns: 1fr 110px 34px; gap: 8px; font-size: 11px; color: var(--color-text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.rec-head .r-right { text-align: right; }
+.rec-line { display: grid; grid-template-columns: 1fr 110px 34px; gap: 8px; align-items: center; margin-bottom: 8px; }
+.rec-line .rec-gr { text-align: right; }
 .precio-input { text-align: right; padding: 7px 9px; height: auto; }
 .precio-input.is-dirty, .precio-input.is-dirty:focus { border-color: var(--color-danger); box-shadow: var(--ring-danger); }
 .vta-total { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--color-surface-warm); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; }

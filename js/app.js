@@ -1493,6 +1493,12 @@
       '<span class="icon-btn" data-edit="' + rowNum + '"><span class="ico"><i data-lucide="pencil"></i></span></span>' +
       '<span class="icon-btn danger" data-del="' + rowNum + '"><span class="ico"><i data-lucide="trash-2"></i></span></span></div>';
   }
+  function prodRowActionsHtml(rowNum) {
+    return '<div class="row-actions">' +
+      '<span class="icon-btn" data-receta="' + rowNum + '" title="Receta"><span class="ico"><i data-lucide="notebook-pen"></i></span></span>' +
+      '<span class="icon-btn" data-edit="' + rowNum + '"><span class="ico"><i data-lucide="pencil"></i></span></span>' +
+      '<span class="icon-btn danger" data-del="' + rowNum + '"><span class="ico"><i data-lucide="trash-2"></i></span></span></div>';
+  }
   function wireRowActions(kind) {
     var v = $('view');
     Array.prototype.forEach.call(v.querySelectorAll('[data-edit]'), function (el) {
@@ -1795,9 +1801,10 @@
         }
         return '<div><span class="badge badge-sm badge-neutral">' + escapeHtml(val || '—') + '</span></div>';
       }).join('');
-      return '<div class="dt-row">' + cells + (isAdmin() ? rowActionsHtml(r._row) : '<div></div>') + '</div>';
+      var actions = isAdmin() ? (sec.key === 'prod' ? prodRowActionsHtml(r._row) : rowActionsHtml(r._row)) : '<div></div>';
+      return '<div class="dt-row">' + cells + actions + '</div>';
     }).join('');
-    return '<div class="data-table cfg-list cfg-cols-' + cols.length + '">' + head + trs + '</div>';
+    return '<div class="data-table cfg-list cfg-cols-' + cols.length + (sec.key === 'prod' ? ' cfg-prod' : '') + '">' + head + trs + '</div>';
   }
 
   function cfgUsersTable(sec) {
@@ -1828,6 +1835,96 @@
     Array.prototype.forEach.call(v.querySelectorAll('[data-del]'), function (el) {
       el.addEventListener('click', function () { deleteCfg(sec, Number(el.getAttribute('data-del'))); });
     });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-receta]'), function (el) {
+      el.addEventListener('click', function () {
+        var n = Number(el.getAttribute('data-receta'));
+        var row = cfgRows(sec).filter(function (r) { return r._row === n; })[0] || null;
+        if (row) openRecetaModal(row);
+      });
+    });
+  }
+
+  /* ----------------------------- recetas ----------------------------- */
+  var recetaCtx = null;
+
+  function insumoOptions(sel) {
+    return insumosLista().map(function (i) {
+      var val = i['Código'] || i['Nombre'] || '';
+      var label = (i['Código'] ? i['Código'] + ' · ' : '') + (i['Nombre'] || '');
+      return '<option value="' + escapeHtml(val) + '"' + (val === sel ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+    }).join('');
+  }
+  function renderRecLines() {
+    var host = $('rec-lines'); if (!host || !recetaCtx) return;
+    host.innerHTML = recetaCtx.lines.map(function (ln, idx) {
+      return '<div class="rec-line" data-i="' + idx + '">' +
+        '<select class="fld-input fld-select rec-insumo"><option value="">Elegir materia prima…</option>' + insumoOptions(ln.insumo) + '</select>' +
+        '<input class="fld-input mono rec-gr" inputmode="decimal" placeholder="0" value="' + escapeHtml(ln.gr === '' || ln.gr == null ? '' : String(ln.gr)) + '">' +
+        '<span class="icon-btn danger rec-del" title="Quitar"><span class="ico"><i data-lucide="trash-2"></i></span></span>' +
+        '</div>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.rec-del'), function (el) {
+      el.addEventListener('click', function () {
+        collectRecLines();
+        var i = Number(el.parentNode.getAttribute('data-i'));
+        recetaCtx.lines.splice(i, 1);
+        if (!recetaCtx.lines.length) recetaCtx.lines.push({ insumo: '', gr: '' });
+        renderRecLines(); drawIcons();
+      });
+    });
+  }
+  function collectRecLines() {
+    var host = $('rec-lines'); if (!host || !recetaCtx) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.rec-line'), function (row) {
+      var i = Number(row.getAttribute('data-i'));
+      recetaCtx.lines[i] = { insumo: row.querySelector('.rec-insumo').value, gr: row.querySelector('.rec-gr').value };
+    });
+  }
+  function openRecetaModal(prodRow) {
+    var producto = prodRow['Producto'] || '', kg = prodRow['Kg por envase'];
+    if (!insumosLista().length) { toast('Primero cargá materias primas en Configuración', true); return; }
+    showLoader(true);
+    Api.list('Recetas').then(function (rows) {
+      showLoader(false);
+      var existing = (rows || []).filter(function (r) { return r['Producto'] === producto; })[0] || null;
+      var ings = [];
+      if (existing && existing['Ingredientes']) { try { ings = JSON.parse(existing['Ingredientes']) || []; } catch (e) { ings = []; } }
+      var lines = ings.length ? ings.map(function (g) { return { insumo: g.insumo || '', gr: g.gr != null ? g.gr : '' }; }) : [{ insumo: '', gr: '' }];
+      recetaCtx = { lines: lines, producto: producto, kg: kg, row: existing ? existing._row : null };
+
+      var body =
+        '<div class="cfg-sub" style="margin-bottom:16px;">Kg por envase: <b>' + escapeHtml(kg != null && kg !== '' ? String(kg) : '—') + '</b></div>' +
+        '<div class="rec-head"><div>Materia prima</div><div class="r-right">Gramos</div><div></div></div>' +
+        '<div id="rec-lines"></div>' +
+        '<button class="btn btn-secondary" id="rec-add" style="margin-top:10px;"><span class="ico"><i data-lucide="plus"></i></span>Agregar materia prima</button>';
+      openModal({
+        title: 'RECETA de ' + producto,
+        body: body,
+        saveLabel: 'Guardar receta',
+        onSave: function (btn) { saveReceta(btn); }
+      });
+      renderRecLines();
+      $('rec-add').addEventListener('click', function () {
+        collectRecLines(); recetaCtx.lines.push({ insumo: '', gr: '' }); renderRecLines(); drawIcons();
+      });
+      drawIcons();
+    }).catch(function (err) { showLoader(false); toast(err.message, true); });
+  }
+  function saveReceta(btn) {
+    if (!recetaCtx) return;
+    collectRecLines();
+    var ings = recetaCtx.lines.map(function (ln) {
+      var gr = toNum(ln.gr);
+      if (!ln.insumo || !(gr > 0)) return null;
+      var mp = insumosLista().filter(function (i) { return (i['Código'] || i['Nombre']) === ln.insumo; })[0] || {};
+      return { insumo: ln.insumo, nombre: mp['Nombre'] || '', gr: gr };
+    }).filter(Boolean);
+    if (!ings.length) { toast('Agregá al menos una materia prima con sus gramos', true); return; }
+    setBtnLoading(btn, true, 'Guardar receta');
+    var rec = { 'Producto': recetaCtx.producto, 'Kg por envase': (recetaCtx.kg == null ? '' : recetaCtx.kg), 'Ingredientes': JSON.stringify(ings) };
+    var op = recetaCtx.row ? Api.update('Recetas', recetaCtx.row, rec) : Api.create('Recetas', rec);
+    op.then(function () { closeModal(); toast('Receta guardada'); })
+      .catch(function (err) { setBtnLoading(btn, false, 'Guardar receta'); toast(err.message, true); });
   }
 
   // Insumos: categorías fijas y prefijo de código autogenerado.
