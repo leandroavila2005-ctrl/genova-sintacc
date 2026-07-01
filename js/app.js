@@ -17,7 +17,7 @@
     ventas: { rows: null, filter: 'Todos', query: '' },
     mov: { rows: null, filter: 'Todas', iva: 'Todos', query: '' },
     mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' }, stockQuery: '', recProd: null },
-    precios: { query: '', edits: {} },
+    precios: { query: '', edits: {}, sel: {}, aumento: '' },
     config: { section: 'mp' }
   };
 
@@ -148,7 +148,7 @@
       state.ventas.filter = 'Todos'; state.ventas.query = '';
       state.mov.filter = 'Todas'; state.mov.iva = 'Todos'; state.mov.query = '';
       state.mpprod.mp.query = ''; state.mpprod.prod.query = ''; state.mpprod.stockQuery = '';
-      state.precios.query = '';
+      state.precios.query = ''; state.precios.sel = {}; state.precios.aumento = '';
     }
     state.route = route;
     Array.prototype.forEach.call($('side-nav').querySelectorAll('.nav-link'), function (el) {
@@ -219,6 +219,9 @@
     var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
       '<span class="ico"><i data-lucide="search"></i></span>' +
       '<input id="precios-search" placeholder="Buscar producto…" value="' + escapeHtml(state.precios.query) + '"></div>' +
+      (admin ? '<div class="aumento-box"><span class="aumento-lbl">Aumento %</span>' +
+        '<input id="precios-aumento" inputmode="decimal" placeholder="0" value="' + escapeHtml(state.precios.aumento || '') + '">' +
+        '<button class="btn-plus" id="precios-aplicar" title="Aplicar aumento a los tildados">+</button></div>' : '') +
       '<button class="btn btn-secondary" id="precios-pdf" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>Lista de precios</button>' +
       (admin ? '<button class="btn btn-primary" id="precios-save" disabled><span class="ico"><i data-lucide="save"></i></span>Guardar cambios</button>' : '') +
       '</div>';
@@ -231,7 +234,10 @@
       var note = admin
         ? '<div class="cfg-sub" style="margin-bottom:14px;">Editá los precios y presioná «Guardar cambios». Los campos modificados se marcan en rojo.</div>'
         : '<div class="notice notice-info" style="margin-bottom:14px;"><span class="ico" style="width:16px;height:16px;"><i data-lucide="lock-keyhole"></i></span>Sólo un administrador puede editar los precios.</div>';
-      var head = '<div class="dt-head"><div>Categoría</div><div>Artículo</div><div>Producto</div><div class="r-right">Precio</div></div>';
+      var sel = state.precios.sel || {};
+      var head = '<div class="dt-head">' +
+        (admin ? '<div><input type="checkbox" class="precio-check-all"></div>' : '') +
+        '<div>Categoría</div><div>Artículo</div><div>Producto</div><div class="r-right">Precio</div></div>';
       var edits = state.precios.edits || {};
       var trs = rows.map(function (r) {
         var edited = edits[r._row] !== undefined;
@@ -241,13 +247,14 @@
           ? '<input class="fld-input mono precio-input' + dirty + '" data-row="' + r._row + '" inputmode="decimal" value="' + escapeHtml(val) + '">'
           : '<span class="num strong">' + (r['Precio'] ? money(r['Precio']) : '—') + '</span>';
         return '<div class="dt-row">' +
+          (admin ? '<div><input type="checkbox" class="precio-check" data-row="' + r._row + '"' + (sel[r._row] ? ' checked' : '') + '></div>' : '') +
           '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
           '<div style="font-weight:500;">' + escapeHtml(r['Artículo'] || '') + '</div>' +
           '<div>' + escapeHtml(r['Producto'] || '') + '</div>' +
           '<div class="r-right">' + precioCell + '</div>' +
           '</div>';
       }).join('');
-      body = search + note + '<div class="data-table tbl-precios">' + head + trs + '</div>';
+      body = search + note + '<div class="data-table tbl-precios' + (admin ? ' has-sel' : '') + '">' + head + trs + '</div>';
     }
     $('view').innerHTML = body;
     var ps = $('precios-search');
@@ -270,9 +277,48 @@
           updateSaveBtn();
         });
       });
+      var au = $('precios-aumento'); if (au) au.addEventListener('input', function () { state.precios.aumento = au.value; });
+      var ap = $('precios-aplicar'); if (ap) ap.onclick = aplicarAumento;
+      Array.prototype.forEach.call($('view').querySelectorAll('.precio-check'), function (el) {
+        el.addEventListener('change', function () {
+          var rowNum = Number(el.getAttribute('data-row'));
+          if (el.checked) state.precios.sel[rowNum] = true; else delete state.precios.sel[rowNum];
+        });
+      });
+      var all = $('view').querySelector('.precio-check-all');
+      if (all) all.addEventListener('change', function () {
+        var on = all.checked;
+        Array.prototype.forEach.call($('view').querySelectorAll('.precio-check'), function (el) {
+          el.checked = on; var rowNum = Number(el.getAttribute('data-row'));
+          if (on) state.precios.sel[rowNum] = true; else delete state.precios.sel[rowNum];
+        });
+      });
       var sb = $('precios-save'); if (sb) sb.onclick = function () { savePreciosAll(sb); };
     }
     drawIcons();
+  }
+
+  // Aumenta el precio de los productos tildados por el % ingresado (queda sin guardar, en rojo).
+  function aplicarAumento() {
+    var pct = toNum(($('precios-aumento') || {}).value);
+    if (!pct) { toast('Ingresá un porcentaje de aumento', true); return; }
+    var sel = state.precios.sel || {};
+    var keys = Object.keys(sel).filter(function (k) { return sel[k]; });
+    if (!keys.length) { toast('Tildá al menos un producto', true); return; }
+    var factor = 1 + pct / 100;
+    keys.forEach(function (k) {
+      var rowNum = Number(k);
+      var p = productosLista().filter(function (r) { return r._row === rowNum; })[0];
+      if (!p) return;
+      var orig = precioOrig(p);
+      var cur = state.precios.edits[rowNum] !== undefined ? state.precios.edits[rowNum] : orig;
+      var nuevo = Math.round(toNum(cur) * factor * 100) / 100;
+      var nuevoStr = String(nuevo);
+      if (nuevoStr === orig) delete state.precios.edits[rowNum];
+      else state.precios.edits[rowNum] = nuevoStr;
+    });
+    renderPrecios();
+    toast('Aumento aplicado · revisá y guardá');
   }
 
   function savePreciosAll(btn) {
@@ -603,6 +649,13 @@
   function isoToShort(iso) { // 'YYYY-MM-DD' -> 'DD/MM'
     var m = String(iso || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     return m ? (('0' + m[3]).slice(-2) + '/' + ('0' + m[2]).slice(-2)) : String(iso || '');
+  }
+  var DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  function fechaDiaNombre(iso) { // 'YYYY-MM-DD' -> 'Miércoles, 01/07'
+    var m = String(iso || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (!m) return String(iso || '');
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return DAYS[d.getDay()] + ', ' + ('0' + m[3]).slice(-2) + '/' + ('0' + m[2]).slice(-2);
   }
   function isoToInput(iso) { // 'YYYY-MM-DD' -> 'DD/MM/YYYY'
     var m = String(iso || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -1304,11 +1357,16 @@
       '.poe-foot .gold{color:#B98A1E;font-weight:600;}' +
       '.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;}' +
       '.toolbar button{font-family:inherit;font-size:13px;font-weight:600;border:none;border-radius:8px;padding:9px 16px;background:#C8102E;color:#fff;cursor:pointer;}' +
-      'table.etq{margin-bottom:16px;page-break-inside:avoid;}' +
-      'table.etq td,table.etq th{border:1px solid #1C1A19;padding:6px 8px;font-size:10.5px;}' +
-      'table.etq tr.band td{background:#1C1A19;color:#fff;font-family:"Spectral",serif;font-weight:600;font-size:11.5px;}' +
-      'table.etq tr.cols th{background:#F6F0E6;color:#1C1A19;text-align:left;font-weight:600;}' +
-      'table.etq tr.blank td{border:none;height:8px;}' +
+      '.etq-block{margin-bottom:30px;page-break-inside:avoid;}' +
+      '.etq-hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;background:#1C1A19;color:#fff;border-left:5px solid #E8B84B;padding:8px 12px;}' +
+      '.etq-hd .etq-title{font-family:"Spectral",serif;font-weight:600;font-size:13px;}' +
+      '.etq-hd .etq-meta{font-size:10.5px;color:#E7D9BE;white-space:nowrap;}' +
+      'table.etq{width:100%;border-collapse:collapse;}' +
+      'table.etq th{background:#F6F0E6;color:#1C1A19;text-align:left;padding:6px 8px;border:1px solid #E2D9C7;font-weight:600;font-size:10.5px;}' +
+      'table.etq td{padding:6px 8px;border:1px solid #E2D9C7;font-size:10.5px;}' +
+      'table.etq th.num,table.etq td.num{text-align:right;font-variant-numeric:tabular-nums;}' +
+      '.etq-ft{width:64%;margin-left:auto;display:flex;justify-content:space-between;gap:16px;background:#FBF6EC;border:1px solid #C8102E;border-top:none;padding:7px 14px;font-size:10.5px;color:#1C1A19;border-radius:0 0 7px 7px;}' +
+      '.etq-ft b{color:#8F0F22;}' +
       '@page{size:A4' + (landscape ? ' landscape' : '') + ';margin:14mm 10mm 18mm;}' +
       '@media print{.noprint{display:none;}body{padding-top:6px;}}' +
       '</style></head><body>' +
@@ -1394,15 +1452,17 @@
           '<td>' + esc(prov) + '</td>' +
           '<td></td></tr>';
       }).join('');
-      return '<table class="etq">' +
-        '<tr class="band"><td colspan="3">' + esc(nombreProd) + '</td><td>' + esc(isoToShort(r['Fecha'])) + '</td><td colspan="2">Operario: Daniela Peragallo</td></tr>' +
-        '<tr class="cols"><th>MP</th><th>Consumo</th><th>Lote</th><th>Fecha Vto</th><th>Proveedor</th><th>Observaciones</th></tr>' +
-        filas +
-        '<tr class="blank"><td colspan="6"></td></tr>' +
-        '<tr class="band"><td colspan="2">Total de producto: ' + (kgTot ? kgTot.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '0') + ' kg</td>' +
-          '<td colspan="2">Lote: ' + esc(r['Lote'] || '') + '</td>' +
-          '<td colspan="2">Total de envases: ' + esc(String(env || 0)) + '</td></tr>' +
-        '</table>';
+      return '<div class="etq-block">' +
+        '<div class="etq-hd"><span class="etq-title">' + esc(nombreProd) + '</span>' +
+          '<span class="etq-meta"><b>' + esc(fechaDiaNombre(r['Fecha'])) + '</b> · Operario: Daniela Peragallo</span></div>' +
+        '<table class="etq"><thead><tr>' +
+          '<th>MP</th><th class="num">Consumo</th><th>Lote</th><th>Fecha Vto</th><th>Proveedor</th><th>Observaciones</th>' +
+          '</tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<div class="etq-ft">' +
+          '<span>Total de producto: <b>' + (kgTot ? kgTot.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '0') + ' kg</b></span>' +
+          '<span>Lote: <b>' + esc(r['Lote'] || '—') + '</b></span>' +
+          '<span>Total de envases: <b>' + esc(String(env || 0)) + '</b></span>' +
+        '</div></div>';
     }).join('');
 
     var section = '<section class="poe"><h2>Planilla de Producción</h2></section>' + etiquetas;

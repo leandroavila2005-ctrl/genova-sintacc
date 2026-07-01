@@ -439,6 +439,13 @@
 .cfg-cols-5 .dt-head, .cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 72px; }
 .cfg-cols-6 .dt-head, .cfg-cols-6 .dt-row { grid-template-columns: 0.9fr 1fr 1.3fr 1fr 0.9fr 0.9fr 72px; }
 .tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 1fr 1.2fr 1.4fr 120px; }
+.tbl-precios.has-sel .dt-head, .tbl-precios.has-sel .dt-row { grid-template-columns: 34px 1fr 1.2fr 1.4fr 120px; }
+.tbl-precios .precio-check, .tbl-precios .precio-check-all { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
+.aumento-box { display: flex; align-items: center; gap: 6px; background: var(--color-surface-warm); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 4px 8px; }
+.aumento-box .aumento-lbl { font-size: 12px; color: var(--color-text-2); white-space: nowrap; }
+.aumento-box input { width: 62px; border: 1px solid var(--card-border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; text-align: right; }
+.btn-plus { width: 28px; height: 28px; border: none; border-radius: 6px; background: var(--color-primary); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.btn-plus:hover { filter: brightness(1.06); }
 .cfg-list.cfg-prod.cfg-cols-5 .dt-head, .cfg-list.cfg-prod.cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 112px; }
 .rec-head { display: grid; grid-template-columns: 1fr 110px 34px; gap: 8px; font-size: 11px; color: var(--color-text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
 .rec-head .r-right { text-align: right; }
