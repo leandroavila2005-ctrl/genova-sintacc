@@ -16,7 +16,7 @@
     monthOpen: false,
     ventas: { rows: null, filter: 'Todos', query: '' },
     mov: { rows: null, filter: 'Todas', iva: 'Todos', query: '' },
-    mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' }, stockQuery: '' },
+    mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' }, stockQuery: '', recProd: null },
     precios: { query: '', edits: {} },
     config: { section: 'mp' }
   };
@@ -654,7 +654,7 @@
     var f = state.ventas.filter, q = state.ventas.query.trim().toLowerCase();
     var view = rows.filter(function (r) {
       return inPeriod(r['Fecha']) && (f === 'Todos' || r['cat'] === f) && (q === '' || String(r['Lista/Canal'] || '').toLowerCase().indexOf(q) >= 0);
-    });
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
 
     var chips = ['Todos'].concat(categorias()).map(function (c) {
       return '<span class="chip' + (c === f ? ' is-active' : '') + '" data-chip="' + escapeHtml(c) + '">' + escapeHtml(c) + '</span>';
@@ -940,7 +940,7 @@
       var okIva = iv === 'Todos' || (iv === 'Con IVA' ? ivaTrue(r['IVA']) : !ivaTrue(r['IVA']));
       return inPeriod(r['Fecha']) && (f === 'Todas' || r['Clasif'] === f) && okIva &&
         (q === '' || String(r['Observación'] || '').toLowerCase().indexOf(q) >= 0);
-    });
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
 
     var chips = ['Todas'].concat(clasificaciones()).map(function (c) {
       return '<span class="chip' + (c === f ? ' is-active' : '') + '" data-chip="' + escapeHtml(c) + '">' + escapeHtml(c) + '</span>';
@@ -1115,6 +1115,10 @@
     if (t === 'prod' && state.ventas.rows == null) {
       Api.list('VENTAS').then(function (rows) { state.ventas.rows = rows; if (state.route === 'mp' && state.mpprod.tab === 'prod') renderMpProd(); }).catch(function () {});
     }
+    // Recetas estampadas: para colorear la etiqueta completa y armar la Planilla de Producción.
+    if (t === 'prod' && state.mpprod.recProd == null) {
+      Api.list('RecetasProd').then(function (rows) { state.mpprod.recProd = rows; if (state.route === 'mp' && state.mpprod.tab === 'prod') renderMpProd(); }).catch(function () {});
+    }
     renderMpProd();
   }
 
@@ -1180,9 +1184,10 @@
     var ph = isMp ? 'Buscar insumo…' : 'Buscar artículo o producto…';
     var poeBtn = isMp ? '<button class="btn btn-secondary" id="mp-poe" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>POE</button>' : '';
     var pgpBtn = !isMp ? '<button class="btn btn-secondary" id="mp-pgp" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>PGP</button>' : '';
+    var planillaBtn = !isMp ? '<button class="btn btn-secondary" id="mp-planilla"><span class="ico"><i data-lucide="clipboard-list"></i></span>Planilla de Producción</button>' : '';
     var search = '<div class="filters" style="margin-bottom:16px;"><div class="search-box">' +
       '<span class="ico"><i data-lucide="search"></i></span>' +
-      '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div>' + poeBtn + pgpBtn + '</div>';
+      '<input id="mp-search" placeholder="' + ph + '" value="' + escapeHtml(q || '') + '"></div>' + poeBtn + pgpBtn + planillaBtn + '</div>';
     $('view').innerHTML = tabs + search + (isMp ? mpTableHtml() : (prodTableHtml() + stockMasterHtml()));
 
     Array.prototype.forEach.call($('view').querySelectorAll('[data-tab]'), function (el) {
@@ -1190,6 +1195,7 @@
     });
     var poe = $('mp-poe'); if (poe) poe.onclick = pdfPOE;
     var pgp = $('mp-pgp'); if (pgp) pgp.onclick = pdfPGP;
+    var pl = $('mp-planilla'); if (pl) pl.onclick = pdfPlanillaProd;
     var s = $('mp-search');
     if (s) s.addEventListener('input', function () {
       if (isMp) state.mpprod.mp.query = s.value; else state.mpprod.prod.query = s.value;
@@ -1274,7 +1280,7 @@
   }
 
   // Documento imprimible con diseño de marca (encabezado + secciones + pie). Usado por PGP.
-  function openPrintDoc(winTitle, headerSub, sectionsHtml) {
+  function openPrintDoc(winTitle, headerSub, sectionsHtml, landscape) {
     var esc = escapeHtml;
     var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
     var html =
@@ -1298,7 +1304,12 @@
       '.poe-foot .gold{color:#B98A1E;font-weight:600;}' +
       '.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;}' +
       '.toolbar button{font-family:inherit;font-size:13px;font-weight:600;border:none;border-radius:8px;padding:9px 16px;background:#C8102E;color:#fff;cursor:pointer;}' +
-      '@page{size:A4;margin:14mm 10mm 18mm;}' +
+      'table.etq{margin-bottom:16px;page-break-inside:avoid;}' +
+      'table.etq td,table.etq th{border:1px solid #1C1A19;padding:6px 8px;font-size:10.5px;}' +
+      'table.etq tr.band td{background:#1C1A19;color:#fff;font-family:"Spectral",serif;font-weight:600;font-size:11.5px;}' +
+      'table.etq tr.cols th{background:#F6F0E6;color:#1C1A19;text-align:left;font-weight:600;}' +
+      'table.etq tr.blank td{border:none;height:8px;}' +
+      '@page{size:A4' + (landscape ? ' landscape' : '') + ';margin:14mm 10mm 18mm;}' +
       '@media print{.noprint{display:none;}body{padding-top:6px;}}' +
       '</style></head><body>' +
       '<div class="noprint toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>' +
@@ -1339,6 +1350,63 @@
       '<table><thead><tr><th>Fecha</th><th>Producto</th><th class="num">Kg totales</th><th class="num">Envases</th><th>Lote</th><th>Observaciones</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></section>';
     openPrintDoc('PGP · ' + mesNom + ' ' + anio, 'Planilla General de Productos · ' + mesNom + ' ' + anio, section);
+  }
+
+  // PDF: Planilla de Producción (horizontal). Etiquetas completas del período, orden ascendente por fecha.
+  function pdfPlanillaProd() {
+    if (state.mpprod.recProd == null || state.mpprod.mp.rows == null) {
+      showLoader(true);
+      var need = [
+        state.mpprod.recProd == null ? Api.list('RecetasProd').then(function (r) { state.mpprod.recProd = r; }) : Promise.resolve(),
+        state.mpprod.mp.rows == null ? Api.list('MP').then(function (r) { state.mpprod.mp.rows = r; }) : Promise.resolve()
+      ];
+      Promise.all(need).then(function () { showLoader(false); pdfPlanillaProd(); })
+        .catch(function (err) { showLoader(false); toast(err.message, true); });
+      return;
+    }
+    var esc = escapeHtml;
+    var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
+    function kgEnv(prod) { var m = productosLista().filter(function (p) { return p['Producto'] === prod; })[0]; return m ? toNum(m['Kg por envase']) : 0; }
+    // Lote / Proveedor / Fecha Vto se toman en vivo del insumo (recepción de MP) elegido en la etiqueta.
+    var mpByRef = {};
+    (state.mpprod.mp.rows || []).forEach(function (m) { mpByRef[String(m['reqId'] || m._row)] = m; });
+    var rows = (state.mpprod.prod.rows || []).filter(function (r) {
+      var ob = String(r['OBS1'] || '').trim().toUpperCase();
+      return inPeriod(r['Fecha']) && ob !== 'SF' && ob !== 'SI' && consumoCompleto(r);
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
+    if (!rows.length) { toast('No hay etiquetas de receta completas en el período', true); return; }
+
+    var etiquetas = rows.map(function (r) {
+      var nombreProd = ((r['Artículo'] ? r['Artículo'] + ' ' : '') + (r['Producto'] || '')).trim();
+      var env = toNum(r['Unidades']);
+      var kgTot = env * kgEnv(r['Producto']);
+      var ings = recProdIngs(recProdFor(r));
+      var filas = ings.map(function (g) {
+        var mp = mpByRef[g.mpRef] || null;
+        var lote = mp ? (mp['Lote'] || '') : (g.lote || '');
+        var vto = mp ? (mp['Fecha Vto'] || '') : (g.vto || '');
+        var prov = mp ? (mp['Proveedor'] || '') : (g.proveedor || '');
+        return '<tr>' +
+          '<td>' + esc(g.nombre || g.insumo || '') + '</td>' +
+          '<td class="num">' + (g.valor != null && g.valor !== '' ? esc(num(g.valor)) + ' g' : '') + '</td>' +
+          '<td>' + esc(lote) + '</td>' +
+          '<td>' + esc(vto) + '</td>' +
+          '<td>' + esc(prov) + '</td>' +
+          '<td></td></tr>';
+      }).join('');
+      return '<table class="etq">' +
+        '<tr class="band"><td colspan="3">' + esc(nombreProd) + '</td><td>' + esc(isoToShort(r['Fecha'])) + '</td><td colspan="2">Operario: Daniela Peragallo</td></tr>' +
+        '<tr class="cols"><th>MP</th><th>Consumo</th><th>Lote</th><th>Fecha Vto</th><th>Proveedor</th><th>Observaciones</th></tr>' +
+        filas +
+        '<tr class="blank"><td colspan="6"></td></tr>' +
+        '<tr class="band"><td colspan="2">Total de producto: ' + (kgTot ? kgTot.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '0') + ' kg</td>' +
+          '<td colspan="2">Lote: ' + esc(r['Lote'] || '') + '</td>' +
+          '<td colspan="2">Total de envases: ' + esc(String(env || 0)) + '</td></tr>' +
+        '</table>';
+    }).join('');
+
+    var section = '<section class="poe"><h2>Planilla de Producción</h2></section>' + etiquetas;
+    openPrintDoc('Planilla de Producción · ' + mesNom + ' ' + anio, 'Planilla de Producción · ' + mesNom + ' ' + anio, section, true);
   }
 
   // PDF: Salida (ventas del mes). Toma Artículo+Producto, Kg total, envases, lote, vto y destino.
@@ -1386,7 +1454,7 @@
     var q = (state.mpprod.mp.query || '').trim().toLowerCase();
     var rows = (state.mpprod.mp.rows || []).filter(function (r) {
       return inPeriod(r['Fecha']) && (q === '' || String(r['Nombre'] || '').toLowerCase().indexOf(q) >= 0);
-    });
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
     if (rows.length === 0) return emptyHtml('package', 'Sin compras este mes', 'No hay compras para este filtro.');
     var head = '<div class="dt-head"><div>Fecha</div><div>Insumo</div><div class="r-right">Cantidad</div>' +
       '<div class="r-right">Precio unit.</div><div class="r-right">Total</div><div></div></div>';
@@ -1420,7 +1488,7 @@
       return inPeriod(r['Fecha']) && ob !== 'SF' && ob !== 'SI' && (q === '' ||
         String(r['Artículo'] || '').toLowerCase().indexOf(q) >= 0 ||
         String(r['Producto'] || '').toLowerCase().indexOf(q) >= 0);
-    });
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
     if (rows.length === 0) return emptyHtml('utensils', 'Sin producción este mes', 'No hay producción para este filtro.');
     var head = '<div class="dt-head"><div>Fecha</div><div>Categoría</div><div>Artículo</div><div>Producto</div>' +
       '<div class="r-right">Unidades producidas</div><div>OBS</div><div class="r-center">Receta</div><div class="r-right">Descuento</div><div></div></div>';
@@ -1435,7 +1503,7 @@
         '</div>' +
         '<div class="num strong">' + num(r['Unidades']) + '</div>' +
         '<div class="text-3" style="font-size:12px;">' + escapeHtml(r['OBS1'] || '—') + '</div>' +
-        '<div class="r-center"><span class="tag-consumo" data-consumo="' + r._row + '">Receta</span></div>' +
+        '<div class="r-center"><span class="tag-consumo' + (consumoCompleto(r) ? ' is-complete' : '') + '" data-consumo="' + r._row + '">Receta</span></div>' +
         '<div class="num muted">' + escapeHtml(String(r['Descuento'] == null ? '' : r['Descuento'])) + '</div>' +
         rowActionsHtml(r._row) + '</div>';
     }).join('');
@@ -1974,7 +2042,22 @@
       consumoCtx.lines[i].mpRef = ref;
       consumoCtx.lines[i].lote = mp ? (mp['Lote'] || '') : '';
       consumoCtx.lines[i].proveedor = mp ? (mp['Proveedor'] || '') : '';
+      consumoCtx.lines[i].vto = mp ? (mp['Fecha Vto'] || '') : '';
     });
+  }
+  // Devuelve la receta estampada de una fila de producción, o null.
+  function recProdFor(prodRow) {
+    var key = prodKey(prodRow);
+    return ((state.mpprod.recProd || []).filter(function (r) { return String(r['reqId prod']) === key; })[0]) || null;
+  }
+  function recProdIngs(rec) {
+    if (!rec || !rec['Ingredientes']) return [];
+    try { return JSON.parse(rec['Ingredientes']) || []; } catch (e) { return []; }
+  }
+  // Completa = tiene ingredientes y todos con lote asignado.
+  function consumoCompleto(prodRow) {
+    var ings = recProdIngs(recProdFor(prodRow));
+    return ings.length > 0 && ings.every(function (g) { return g.lote && String(g.lote).trim() !== ''; });
   }
   function openConsumoModal(prodRow) {
     var producto = prodRow['Producto'] || '';
@@ -1989,12 +2072,12 @@
       var lines;
       if (stamped && stamped['Ingredientes']) {
         var st = []; try { st = JSON.parse(stamped['Ingredientes']) || []; } catch (e) { st = []; }
-        lines = st.map(function (g) { return { insumo: g.insumo || '', nombre: g.nombre || '', gr: g.gr, valor: g.valor, mpRef: g.mpRef || '', lote: g.lote || '', proveedor: g.proveedor || '' }; });
+        lines = st.map(function (g) { return { insumo: g.insumo || '', nombre: g.nombre || '', gr: g.gr, valor: g.valor, mpRef: g.mpRef || '', lote: g.lote || '', proveedor: g.proveedor || '', vto: g.vto || '' }; });
       } else {
         var base = recetas.filter(function (r) { return r['Producto'] === producto; })[0] || null;
         var ings = [];
         if (base && base['Ingredientes']) { try { ings = JSON.parse(base['Ingredientes']) || []; } catch (e2) { ings = []; } }
-        lines = ings.map(function (g) { var gr = toNum(g.gr); return { insumo: g.insumo || '', nombre: g.nombre || '', gr: gr, valor: gr * units, mpRef: '', lote: '', proveedor: '' }; });
+        lines = ings.map(function (g) { var gr = toNum(g.gr); return { insumo: g.insumo || '', nombre: g.nombre || '', gr: gr, valor: gr * units, mpRef: '', lote: '', proveedor: '', vto: '' }; });
       }
       if (!lines.length) { toast('El producto no tiene receta cargada en Configuración', true); return; }
       consumoCtx = { lines: lines, mp: mpRows, key: key, producto: producto, lote: prodRow['Lote'] || '', row: stamped ? stamped._row : null };
@@ -2017,13 +2100,15 @@
     if (!consumoCtx) return;
     collectConsLines();
     var ings = consumoCtx.lines.map(function (ln) {
-      return { insumo: ln.insumo, nombre: ln.nombre, gr: ln.gr, valor: ln.valor, mpRef: ln.mpRef || '', lote: ln.lote || '', proveedor: ln.proveedor || '' };
+      return { insumo: ln.insumo, nombre: ln.nombre, gr: ln.gr, valor: ln.valor, mpRef: ln.mpRef || '', lote: ln.lote || '', proveedor: ln.proveedor || '', vto: ln.vto || '' };
     });
     setBtnLoading(btn, true, 'Guardar receta');
     var rec = { 'reqId prod': consumoCtx.key, 'Producto': consumoCtx.producto, 'Lote': consumoCtx.lote, 'Ingredientes': JSON.stringify(ings) };
     var op = consumoCtx.row ? Api.update('RecetasProd', consumoCtx.row, rec) : Api.create('RecetasProd', rec);
-    op.then(function () { closeModal(); toast('Receta de producción guardada'); })
-      .catch(function (err) { setBtnLoading(btn, false, 'Guardar receta'); toast(err.message, true); });
+    op.then(function () {
+      closeModal(); toast('Receta de producción guardada');
+      Api.list('RecetasProd').then(function (rows) { state.mpprod.recProd = rows; if (state.route === 'mp' && state.mpprod.tab === 'prod') renderMpProd(); }).catch(function () {});
+    }).catch(function (err) { setBtnLoading(btn, false, 'Guardar receta'); toast(err.message, true); });
   }
 
   // Insumos: categorías fijas y prefijo de código autogenerado.

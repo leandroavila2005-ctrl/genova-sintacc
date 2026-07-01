@@ -424,6 +424,8 @@
 .r-center { text-align: center; }
 .tag-consumo { display: inline-block; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--color-accent-700); background: var(--color-surface-warm); border: 1px solid var(--card-border); border-radius: 999px; padding: 3px 10px; }
 .tag-consumo:hover { background: var(--row-hover); }
+.tag-consumo.is-complete { color: #1a7f4b; background: #e7f6ee; border-color: #b7e2c9; }
+.tag-consumo.is-complete:hover { background: #d8f0e2; }
 .cons-head { display: grid; grid-template-columns: 1.1fr 90px 1.4fr; gap: 8px; font-size: 11px; color: var(--color-text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
 .cons-head .r-right { text-align: right; }
 .cons-line { display: grid; grid-template-columns: 1.1fr 90px 1.4fr; gap: 8px; align-items: center; margin-bottom: 8px; }
