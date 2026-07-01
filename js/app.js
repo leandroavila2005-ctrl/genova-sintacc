@@ -1831,8 +1831,8 @@
   }
 
   // Insumos: categorías fijas y prefijo de código autogenerado.
-  var MP_CATS = ['Secos', 'Refrigerados', 'Insumos', 'Otros'];
-  var MP_CODE_PREFIX = { 'Secos': 'MPS', 'Refrigerados': 'MPR', 'Insumos': 'MPI', 'Otros': 'MPO' };
+  var MP_CATS = ['Secos', 'Refrigerados', 'Frescos', 'Insumos', 'Otros'];
+  var MP_CODE_PREFIX = { 'Secos': 'MPS', 'Refrigerados': 'MPR', 'Frescos': 'MPF', 'Insumos': 'MPI', 'Otros': 'MPO' };
   function nextInsumoCode(cat) {
     var prefix = MP_CODE_PREFIX[cat] || 'MPO';
     var re = new RegExp('^' + prefix + '-(\\d+)$'), max = 0;
