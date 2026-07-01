@@ -28,13 +28,14 @@
 
   var NAV = [
     { key: 'dashboard',   label: 'Dashboard',       icon: 'layout-dashboard' },
+    { key: 'resultados',  label: 'Estado de resultados', icon: 'table' },
     { key: 'ventas',      label: 'Ventas',          icon: 'receipt-text' },
     { key: 'precios',     label: 'Precios',         icon: 'tag' },
     { key: 'movimientos', label: 'Movimientos',     icon: 'arrow-left-right' },
     { key: 'mp',          label: 'MP y Producción', icon: 'package' },
     { key: 'config',      label: 'Configuración',   icon: 'settings' }
   ];
-  var TITLES = { dashboard:'Dashboard', ventas:'Ventas', precios:'Precios', movimientos:'Movimientos', mp:'MP y Producción', config:'Configuración' };
+  var TITLES = { dashboard:'Dashboard', resultados:'Estado de resultados', ventas:'Ventas', precios:'Precios', movimientos:'Movimientos', mp:'MP y Producción', config:'Configuración' };
 
   /* ----------------------------- helpers ----------------------------- */
   function $(id) { return document.getElementById(id); }
@@ -196,6 +197,7 @@
   function renderRoute() {
     applyHeaderAction(state.route);
     if (state.route === 'dashboard') return renderDashboard();
+    if (state.route === 'resultados') return ensureResultados();
     if (state.route === 'ventas') return ensureVentas();
     if (state.route === 'precios') return renderPrecios();
     if (state.route === 'movimientos') return ensureMov();
@@ -438,10 +440,14 @@
     var gFin = movSum(movs, 'Gastos Financieros', mes);
     var otrosIng = movSum(movs, 'Otros Ing No Operativos', mes);
     var otrosGtos = movSum(movs, 'Otros Gtos No Operativos', mes);
+    var impOper = movSum(movs, 'Impuestos operativos', mes);
+    var impGan = movSum(movs, 'Impuesto a las ganancias', mes);
 
     var utBruta = ventasMes - mpMes - sueldos - cf;
-    var utOp = utBruta - gAdm - gCom;
-    var neto = utOp + otrosIng - gFin - otrosGtos;
+    var ebitda = utBruta - gAdm - gCom - impOper;
+    var antesImp = ebitda + otrosIng - gFin - otrosGtos;
+    var neto = antesImp - impGan;
+    var utOp = ebitda; // compat con vistas previas
     var safe = function (x) { return ventasMes ? x / ventasMes : 0; };
 
     // mix de cobro (EFVO / Tarj o cta / MP)
@@ -462,9 +468,9 @@
 
     return {
       ventasMes: ventasMes, ventasAcum: ventasAcum,
-      mpMes: mpMes, sueldos: sueldos, cf: cf, gAdm: gAdm, gCom: gCom, gFin: gFin, otrosGtos: otrosGtos,
-      utBruta: utBruta, utOp: utOp, neto: neto,
-      margenBruto: safe(utBruta), margenOp: safe(utOp), margenNeto: safe(neto),
+      mpMes: mpMes, sueldos: sueldos, cf: cf, gAdm: gAdm, gCom: gCom, gFin: gFin, otrosIng: otrosIng, otrosGtos: otrosGtos, impOper: impOper, impGan: impGan,
+      utBruta: utBruta, ebitda: ebitda, antesImp: antesImp, utOp: utOp, neto: neto,
+      margenBruto: safe(utBruta), margenEbitda: safe(ebitda), margenOp: safe(utOp), margenNeto: safe(neto),
       mix: { efvo: efvo / cobroTot, tarj: tarj / cobroTot, mpago: mpago / cobroTot },
       prodArr: prodArr, prodTotal: prodTotal,
       domCat: domCat, domPct: domPct
@@ -572,6 +578,72 @@
       state.dashPrev = data; state.dashPrevYear = py;
       if (state.route === 'dashboard' && state.dashAnnual) renderDashboard();
     }).catch(function () {});
+  }
+
+  /* ----------------------------- estado de resultados ----------------------------- */
+  function ensureResultados() {
+    showLoader(true);
+    Api.dashboard(state.period.anio).then(function (data) {
+      state.dash = data; showLoader(false);
+      if (state.route === 'resultados') renderResultados();
+    }).catch(function (err) {
+      showLoader(false); toast(err.message, true);
+      if (state.dash && state.route === 'resultados') renderResultados();
+    });
+  }
+  function erFmt(v) {
+    v = Math.round(v); var a = Math.abs(v), s;
+    if (a >= 1e6) s = (v / 1e6).toFixed(2).replace('.', ',') + 'M';
+    else if (a >= 1e3) s = Math.round(v / 1e3) + 'k';
+    else s = String(v);
+    return s;
+  }
+  function renderResultados() {
+    if (!state.dash) { $('view').innerHTML = '<div class="placeholder"><span class="ico"><i data-lucide="loader"></i></span><div>Cargando datos…</div></div>'; drawIcons(); return; }
+    var anio = state.period.anio;
+    var K = []; for (var m = 1; m <= 12; m++) K.push(computeKpis(state.dash, m));
+    var A = computeKpis(state.dash, null);
+
+    var head = '<thead><tr><th class="c">Concepto</th>' +
+      MONTHS_SHORT.map(function (mm) { return '<th>' + mm + '</th>'; }).join('') +
+      '<th class="tot">Año</th></tr></thead>';
+    function cell(v, sign, tot) {
+      var neg = sign < 0 || v < 0;
+      return '<td class="' + (tot ? 'tot ' : '') + (neg ? 'neg' : '') + '">' + (sign < 0 ? '−' : '') + erFmt(Math.abs(v)) + '</td>';
+    }
+    function line(label, key, sign, cls, pre) {
+      var cells = K.map(function (kk) { return cell(kk[key], sign, false); }).join('');
+      return '<tr class="' + (cls || '') + '"><td class="c">' + (pre || '') + escapeHtml(label) + '</td>' + cells + cell(A[key], sign, true) + '</tr>';
+    }
+    function mg(label, key) {
+      var cells = K.map(function (kk) { return '<td>' + pct(kk[key]) + '</td>'; }).join('');
+      return '<tr class="er-mg"><td class="c">' + escapeHtml(label) + '</td>' + cells + '<td class="tot">' + pct(A[key]) + '</td></tr>';
+    }
+    var body =
+      line('Ventas', 'ventasMes', 1, '') +
+      line('Materia prima', 'mpMes', -1, '', '( − ) ') +
+      line('Cargas fabriles', 'cf', -1, '', '( − ) ') +
+      line('Sueldos', 'sueldos', -1, '', '( − ) ') +
+      line('Utilidad bruta', 'utBruta', 1, 'er-sub') +
+      mg('Margen bruto', 'margenBruto') +
+      line('Gastos administrativos', 'gAdm', -1, '', '( − ) ') +
+      line('Gastos de comercialización', 'gCom', -1, '', '( − ) ') +
+      line('Impuestos operativos', 'impOper', -1, '', '( − ) ') +
+      line('EBITDA', 'ebitda', 1, 'er-sub') +
+      mg('Margen EBITDA', 'margenEbitda') +
+      line('Gastos financieros', 'gFin', -1, '', '( − ) ') +
+      line('Otros ingresos', 'otrosIng', 1, '', '( + ) ') +
+      line('Otros gastos', 'otrosGtos', -1, '', '( − ) ') +
+      line('Resultado antes de impuestos', 'antesImp', 1, 'er-sub') +
+      line('Impuesto a las ganancias', 'impGan', -1, '', '( − ) ') +
+      line('Resultado neto', 'neto', 1, 'er-net') +
+      mg('Margen neto', 'margenNeto');
+
+    $('view').innerHTML =
+      '<div class="cfg-title" style="margin-bottom:4px;">Estado de resultados ' + anio + '</div>' +
+      '<div class="cfg-sub" style="margin-bottom:16px;">Todo el año en una pantalla · se recalcula con cada movimiento cargado.</div>' +
+      '<div class="er-scroll"><table class="er-tbl">' + head + '<tbody>' + body + '</tbody></table></div>';
+    drawIcons();
   }
 
   function chartVentasCanal(d, mes, annual) {
@@ -993,7 +1065,7 @@
   }
 
   /* ----------------------------- movimientos ----------------------------- */
-  var CLASIF_FIJAS = ['Sueldos', 'CF', 'Gastos Administrativos', 'Gastos Comercialización', 'Gastos Financieros', 'Otros Ing No Operativos', 'Otros Gtos No Operativos'];
+  var CLASIF_FIJAS = ['Sueldos', 'CF', 'Gastos Administrativos', 'Gastos Comercialización', 'Impuestos operativos', 'Gastos Financieros', 'Otros Ing No Operativos', 'Otros Gtos No Operativos', 'Impuesto a las ganancias'];
 
   function clasifBadgeClass(c) {
     if (c === 'Sueldos') return 'badge-minorista';

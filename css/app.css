@@ -438,6 +438,18 @@
 .cfg-cols-4 .dt-head, .cfg-cols-4 .dt-row { grid-template-columns: 1fr 1.3fr 1.3fr 1fr 72px; }
 .cfg-cols-5 .dt-head, .cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 72px; }
 .cfg-cols-6 .dt-head, .cfg-cols-6 .dt-row { grid-template-columns: 0.9fr 1fr 1.3fr 1fr 0.9fr 0.9fr 72px; }
+.er-scroll { overflow-x: auto; border: 1px solid var(--card-border); border-radius: var(--radius-lg); background: var(--color-surface-card); }
+.er-tbl { border-collapse: collapse; width: 100%; min-width: 960px; font-size: 12px; }
+.er-tbl th, .er-tbl td { padding: 7px 10px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.er-tbl thead th { background: var(--color-ink); color: #fff; border-bottom: 2px solid var(--color-accent); font-weight: 600; position: sticky; top: 0; z-index: 2; }
+.er-tbl th.c, .er-tbl td.c { text-align: left; position: sticky; left: 0; background: var(--color-surface-card); z-index: 1; }
+.er-tbl thead th.c { background: var(--color-ink); z-index: 3; }
+.er-tbl tbody td { border-bottom: 1px solid var(--card-border); }
+.er-tbl .tot { border-left: 2px solid var(--color-accent); font-weight: 600; }
+.er-tbl tr.er-sub td { background: var(--color-surface-warm); font-weight: 600; }
+.er-tbl tr.er-net td, .er-tbl tr.er-net td.c { background: var(--color-ink); color: #fff; font-weight: 600; }
+.er-tbl tr.er-mg td { color: var(--color-accent-700); font-size: 11px; font-style: italic; }
+.er-tbl td.neg { color: var(--color-danger); }
 .tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 1fr 1.2fr 1.4fr 120px; }
 .tbl-precios.has-sel .dt-head, .tbl-precios.has-sel .dt-row { grid-template-columns: 34px 1fr 1.2fr 1.4fr 120px; }
 .tbl-precios .precio-check, .tbl-precios .precio-check-all { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
