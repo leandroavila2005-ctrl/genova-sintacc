@@ -140,6 +140,12 @@
   function closeNav() { var r = document.querySelector('.app-root'); if (r) r.classList.remove('nav-open'); }
 
   function setRoute(route) {
+    if (route !== state.route) { // al cambiar de solapa se vacían los filtros
+      state.ventas.filter = 'Todos'; state.ventas.query = '';
+      state.mov.filter = 'Todas'; state.mov.iva = 'Todos'; state.mov.query = '';
+      state.mpprod.mp.query = ''; state.mpprod.prod.query = ''; state.mpprod.stockQuery = '';
+      state.precios.query = '';
+    }
     state.route = route;
     Array.prototype.forEach.call($('side-nav').querySelectorAll('.nav-link'), function (el) {
       el.classList.toggle('is-active', el.getAttribute('data-route') === route);
@@ -322,7 +328,7 @@
     var mpMes = sumBy(mp, 'Total', mes, 'Mes');
     var sueldos = movSum(movs, 'Sueldos', mes);
     var cf = movSum(movs, 'CF', mes);
-    var gAdm = movSum(movs, 'Gastos Adm', mes);
+    var gAdm = movSum(movs, 'Gastos Administrativos', mes);
     var gCom = movSum(movs, 'Gastos Comercialización', mes);
     var gFin = movSum(movs, 'Gastos Financieros', mes);
     var otrosIng = movSum(movs, 'Otros Ing No Operativos', mes);
@@ -839,7 +845,7 @@
   }
 
   /* ----------------------------- movimientos ----------------------------- */
-  var CLASIF_FIJAS = ['Sueldos', 'CF', 'Gastos Adm', 'Gastos Comercialización', 'Gastos Financieros', 'Otros Ing No Operativos', 'Otros Gtos No Operativos'];
+  var CLASIF_FIJAS = ['Sueldos', 'CF', 'Gastos Administrativos', 'Gastos Comercialización', 'Gastos Financieros', 'Otros Ing No Operativos', 'Otros Gtos No Operativos'];
 
   function clasifBadgeClass(c) {
     if (c === 'Sueldos') return 'badge-minorista';
@@ -1103,7 +1109,10 @@
       if (state.route === 'mp' && state.mpprod.tab === 'prod') renderMpProd();
     }).catch(function (err) { showLoader(false); toast(err.message, true); });
   }
-  function switchMpTab(t) { state.mpprod.tab = t; applyHeaderAction('mp'); ensureMpProd(); }
+  function switchMpTab(t) {
+    if (t !== state.mpprod.tab) { state.mpprod.mp.query = ''; state.mpprod.prod.query = ''; state.mpprod.stockQuery = ''; }
+    state.mpprod.tab = t; applyHeaderAction('mp'); ensureMpProd();
+  }
 
   function renderMpProd() {
     var isMp = state.mpprod.tab === 'mp';

@@ -53,7 +53,7 @@
     db.MOVIMIENTOS.push(
       mov(f(5), 'Sueldos quincena', 'Personal', 285000 + mo * 3000, 'No', 'Sueldos'),
       mov(f(8), 'Alquiler y servicios', 'Costos fijos', 120000, 'Sí', 'CF'),
-      mov(f(12), 'Gastos administrativos', '', 95000, 'Sí', 'Gastos Adm'),
+      mov(f(12), 'Gastos administrativos', '', 95000, 'Sí', 'Gastos Administrativos'),
       mov(f(15), 'Publicidad redes', 'Comercial', 45000, 'Sí', 'Gastos Comercialización'),
       mov(f(20), 'Comisiones bancarias', '', 12000, 'No', 'Gastos Financieros')
     );
