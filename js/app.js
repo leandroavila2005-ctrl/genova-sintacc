@@ -2334,6 +2334,7 @@
     handle.style.cursor = 'move';
     handle.addEventListener('pointerdown', function (e) {
       if (e.target.closest('#modal-x')) return;
+      modal.style.animation = 'none'; // el fadeUp (fill both) fija transform:none y pisaría el arrastre
       dragging = true; sx = e.clientX; sy = e.clientY; e.preventDefault();
       try { handle.setPointerCapture(e.pointerId); } catch (_) {}
     });
