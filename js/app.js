@@ -736,7 +736,7 @@
     var segs = [
       { l: 'Materia prima', v: k.mpMes, c: 'var(--color-ink)' },
       { l: 'Sueldos', v: k.sueldos, c: 'var(--color-primary)' },
-      { l: 'Costos fijos', v: k.cf, c: 'var(--color-accent)' },
+      { l: 'Cargas fabriles', v: k.cf, c: 'var(--color-accent)' },
       { l: 'Comercialización', v: k.gCom, c: 'var(--color-accent-700)' },
       { l: 'Otros', v: k.gAdm + k.gFin + k.otrosGtos, c: '#DACFBA' }
     ];
