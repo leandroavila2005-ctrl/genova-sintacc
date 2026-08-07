@@ -20,6 +20,7 @@
     mov: { rows: null, filter: 'Todas', iva: 'Todos', query: '' },
     mpprod: { tab: 'mp', mp: { rows: null, query: '' }, prod: { rows: null, query: '' }, stockQuery: '', recProd: null },
     precios: { query: '', edits: {}, sel: {}, aumento: '' },
+    billetera: { tab: 'caja', rows: null, filter: 'Descuentos' },
     config: { section: 'mp' }
   };
 
@@ -33,9 +34,10 @@
     { key: 'precios',     label: 'Precios',         icon: 'tag' },
     { key: 'movimientos', label: 'Movimientos',     icon: 'arrow-left-right' },
     { key: 'mp',          label: 'MP y Producción', icon: 'package' },
+    { key: 'billetera',   label: 'Billetera',       icon: 'wallet' },
     { key: 'config',      label: 'Configuración',   icon: 'settings' }
   ];
-  var TITLES = { dashboard:'Dashboard', resultados:'Estado de resultados', ventas:'Ventas', precios:'Precios', movimientos:'Movimientos', mp:'MP y Producción', config:'Configuración' };
+  var TITLES = { dashboard:'Dashboard', resultados:'Estado de resultados', ventas:'Ventas', precios:'Precios', movimientos:'Movimientos', mp:'MP y Producción', billetera:'Billetera', config:'Configuración' };
 
   /* ----------------------------- helpers ----------------------------- */
   function $(id) { return document.getElementById(id); }
@@ -152,13 +154,14 @@
       state.mov.filter = 'Todas'; state.mov.iva = 'Todos'; state.mov.query = '';
       state.mpprod.mp.query = ''; state.mpprod.prod.query = ''; state.mpprod.stockQuery = '';
       state.precios.query = ''; state.precios.sel = {}; state.precios.aumento = '';
+      state.billetera.filter = 'Descuentos';
     }
     state.route = route;
     Array.prototype.forEach.call($('side-nav').querySelectorAll('.nav-link'), function (el) {
       el.classList.toggle('is-active', el.getAttribute('data-route') === route);
     });
     $('header-title').textContent = TITLES[route] || '';
-    $('month-picker').classList.toggle('is-hidden', route === 'config' || route === 'precios'); // catálogos: no dependen del período
+    $('month-picker').classList.toggle('is-hidden', route === 'config' || route === 'precios' || route === 'billetera'); // catálogos/saldos: no dependen del período
     $('header-action').classList.add('is-hidden'); // se activa por vista cuando corresponda
     $('header-action2').classList.add('is-hidden');
     renderRoute();
@@ -166,7 +169,8 @@
 
   var HEADER_ACTIONS = {
     ventas: { label: 'Nueva venta', icon: 'plus', fn: function () { openVentaModal(null); } },
-    movimientos: { label: 'Nuevo movimiento', icon: 'plus', fn: function () { openMovModal(null); } }
+    movimientos: { label: 'Nuevo movimiento', icon: 'plus', fn: function () { openMovModal(null); } },
+    billetera: { label: 'Nuevo movimiento', icon: 'plus', fn: function () { openBilleteraModal(null); } }
   };
   function applyHeaderAction(route) {
     var ha = $('header-action'), cfg = HEADER_ACTIONS[route];
@@ -202,6 +206,7 @@
     if (state.route === 'precios') return renderPrecios();
     if (state.route === 'movimientos') return ensureMov();
     if (state.route === 'mp') return ensureMpProd();
+    if (state.route === 'billetera') return ensureBilletera();
     if (state.route === 'config') return renderConfig();
     $('view').innerHTML = '<div class="placeholder"><span class="ico"><i data-lucide="hammer"></i></span>' +
       '<div>Vista «' + escapeHtml(TITLES[state.route]) + '» en construcción.</div></div>';
@@ -1255,6 +1260,142 @@
     showLoader(true);
     Api.remove('MOVIMIENTOS', rowNum).then(function () {
       showLoader(false); toast('Movimiento eliminado'); loadMov(true);
+    }).catch(function (err) { showLoader(false); toast(err.message, true); });
+  }
+
+  /* ----------------------------- billetera ----------------------------- */
+  var BILL_CUENTAS_CC = ['Pablo', 'Leandro'];
+
+  function ensureBilletera() {
+    if (state.billetera.rows == null) { loadingView(); return loadBilletera(); }
+    renderBilletera();
+  }
+  function loadBilletera(silent) {
+    if (!silent) showLoader(true);
+    return Api.list('BILLETERA').then(function (rows) {
+      state.billetera.rows = rows; showLoader(false);
+      if (state.route === 'billetera') renderBilletera();
+    }).catch(function (err) { showLoader(false); toast(err.message, true); });
+  }
+  function esIngresoBill(r) { return /^ingreso$/i.test(String(r['Tipo'] || '')); }
+  // Saldo histórico total: ingresos menos descuentos de esa cuenta.
+  function billSaldo(cuenta) {
+    return (state.billetera.rows || []).reduce(function (a, r) {
+      if (r['Cuenta'] !== cuenta) return a;
+      var m = toNum(r['Monto']);
+      return a + (esIngresoBill(r) ? m : -m);
+    }, 0);
+  }
+
+  function renderBilletera() {
+    var isCaja = state.billetera.tab === 'caja';
+    var tabs = '<div class="tabs-segmented" style="margin-bottom:20px;">' +
+      '<button class="tab-seg' + (isCaja ? ' is-active' : '') + '" data-btab="caja">Caja chica</button>' +
+      '<button class="tab-seg' + (!isCaja ? ' is-active' : '') + '" data-btab="cc">Cuenta Corriente</button></div>';
+    var cardHtml = function (label, saldo) {
+      return '<div class="wallet-card"><div class="wc-label">' + escapeHtml(label) + '</div>' +
+        '<div class="wc-value' + (saldo < 0 ? ' neg' : '') + '">' + money(saldo) + '</div></div>';
+    };
+    var cards = isCaja
+      ? '<div class="wallet-cards">' + cardHtml('Saldo en caja chica', billSaldo('Caja chica')) + '</div>'
+      : '<div class="wallet-cards">' + cardHtml('Pablo', billSaldo('Pablo')) + cardHtml('Leandro', billSaldo('Leandro')) + '</div>';
+    var f = state.billetera.filter;
+    var chips = ['Descuentos', 'Ingresos', 'Todos'].map(function (c) {
+      return '<span class="chip' + (c === f ? ' is-active' : '') + '" data-bchip="' + c + '">' + c + '</span>';
+    }).join('');
+    var filters = '<div class="filters" style="margin-bottom:14px;"><span class="filters-label">Movimientos</span>' + chips + '</div>';
+    $('view').innerHTML = tabs + cards + filters + billTableHtml(isCaja);
+
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-btab]'), function (el) {
+      el.addEventListener('click', function () { state.billetera.tab = el.getAttribute('data-btab'); renderBilletera(); });
+    });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-bchip]'), function (el) {
+      el.addEventListener('click', function () { state.billetera.filter = el.getAttribute('data-bchip'); renderBilletera(); });
+    });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-edit]'), function (el) {
+      el.addEventListener('click', function () {
+        var n = Number(el.getAttribute('data-edit'));
+        var row = (state.billetera.rows || []).filter(function (r) { return r._row === n; })[0] || null;
+        if (row) openBilleteraModal(row);
+      });
+    });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-del]'), function (el) {
+      el.addEventListener('click', function () { deleteBilletera(Number(el.getAttribute('data-del'))); });
+    });
+    drawIcons();
+  }
+
+  // Lista maestra (histórico completo, sin importar el mes), de más viejo a más nuevo.
+  function billTableHtml(isCaja) {
+    var f = state.billetera.filter;
+    var rows = (state.billetera.rows || []).filter(function (r) {
+      var okCuenta = isCaja ? r['Cuenta'] === 'Caja chica' : (r['Cuenta'] === 'Pablo' || r['Cuenta'] === 'Leandro');
+      var okTipo = f === 'Todos' || (f === 'Ingresos' ? esIngresoBill(r) : !esIngresoBill(r));
+      return okCuenta && okTipo;
+    }).sort(function (a, b) { return String(a['Fecha'] || '').localeCompare(String(b['Fecha'] || '')); });
+    if (!rows.length) return emptyHtml('wallet', 'Sin movimientos', 'Registrá el primero con «Nuevo movimiento».');
+    var head = '<div class="dt-head"><div>Fecha</div>' + (isCaja ? '' : '<div>Cuenta</div>') +
+      '<div>Detalle</div><div>Tipo</div><div class="r-right">Monto</div><div></div></div>';
+    var total = 0;
+    var trs = rows.map(function (r) {
+      var ing = esIngresoBill(r);
+      var m = toNum(r['Monto']);
+      total += ing ? m : -m;
+      return '<div class="dt-row">' +
+        '<div class="date">' + isoToShort(r['Fecha']) + '</div>' +
+        (isCaja ? '' : '<div style="font-weight:500;">' + escapeHtml(r['Cuenta'] || '') + '</div>') +
+        '<div>' + escapeHtml(r['Detalle'] || '—') + '</div>' +
+        '<div><span class="badge badge-sm ' + (ing ? 'badge-online' : 'badge-minorista') + '">' + (ing ? 'Ingreso' : 'Descuento') + '</span></div>' +
+        '<div class="num strong"' + (ing ? '' : ' style="color:var(--color-danger);"') + '>' + (ing ? '' : '−') + money(m) + '</div>' +
+        rowActionsHtml(r._row) + '</div>';
+    }).join('');
+    var foot = '<div class="dt-foot"><div>' + rows.length + ' movimientos</div>' +
+      '<div>Neto <span class="num strong" style="padding:0; margin-left:6px;">' + money(total) + '</span></div></div>';
+    return '<div class="data-table tbl-billetera' + (isCaja ? '' : ' has-cta') + '">' + head + trs + foot + '</div>';
+  }
+
+  function openBilleteraModal(row) {
+    var ed = !!row;
+    var isCaja = state.billetera.tab === 'caja';
+    var cuentas = isCaja ? ['Caja chica'] : BILL_CUENTAS_CC.slice();
+    var curCta = ed ? (row['Cuenta'] || cuentas[0]) : cuentas[0];
+    if (cuentas.indexOf(curCta) < 0) cuentas = [curCta].concat(cuentas);
+    var curTipo = ed && esIngresoBill(row) ? 'Ingreso' : 'Descuento';
+    var body =
+      '<div class="form-grid g-2">' +
+        fld('Fecha', '<input id="b-fecha" class="fld-input" placeholder="14/03 o 14/03/2026" value="' + escapeHtml(ed ? isoToInput(row['Fecha']) : '') + '"><div class="fld-err" id="eb-fecha"></div>') +
+        fld('Monto', moneyInput('b-monto', ed ? row['Monto'] : '') + '<div class="fld-err" id="eb-monto"></div>') +
+      '</div>' +
+      '<div style="margin-bottom:16px;"><div class="fld-label">Cuenta</div>' + optGroupHtml('b-cuenta', cuentas, curCta) + '</div>' +
+      '<div style="margin-bottom:16px;"><div class="fld-label">Tipo</div>' + optGroupHtml('b-tipo', ['Descuento', 'Ingreso'], curTipo) + '</div>' +
+      '<div style="margin-bottom:4px;">' + fld('Detalle', '<input id="b-detalle" class="fld-input" placeholder="Detalle del movimiento" value="' + escapeHtml(ed ? (row['Detalle'] || '') : '') + '">') + '</div>';
+    openModal({
+      title: ed ? 'Editar movimiento' : 'Nuevo movimiento',
+      body: body,
+      saveLabel: ed ? 'Guardar cambios' : 'Guardar movimiento',
+      onSave: function (btn) { saveBilletera(btn, ed ? row._row : null); }
+    });
+  }
+  function saveBilletera(btn, rowNum) {
+    var fechaN = normalizeFecha($('b-fecha').value);
+    var monto = toNum($('b-monto').value);
+    var ok = true;
+    if (!fechaN) { fieldError('b-fecha', 'eb-fecha', 'Fecha inválida'); ok = false; } else fieldOk('b-fecha', 'eb-fecha');
+    if (!(monto > 0)) { fieldError('b-monto', 'eb-monto', 'Monto mayor a 0'); ok = false; } else fieldOk('b-monto', 'eb-monto');
+    if (!ok) return;
+    var record = { 'Fecha': fechaN, 'Cuenta': optGroupVal('b-cuenta'), 'Tipo': optGroupVal('b-tipo'), 'Detalle': $('b-detalle').value.trim(), 'Monto': monto };
+    setBtnLoading(btn, true, rowNum ? 'Guardar cambios' : 'Guardar movimiento');
+    var op = rowNum ? Api.update('BILLETERA', rowNum, record) : Api.create('BILLETERA', record);
+    op.then(function () {
+      closeModal(); toast(rowNum ? 'Movimiento actualizado' : 'Movimiento guardado');
+      loadBilletera(true);
+    }).catch(function (err) { setBtnLoading(btn, false); toast(err.message, true); });
+  }
+  function deleteBilletera(rowNum) {
+    if (!confirm('¿Eliminar este movimiento?')) return;
+    showLoader(true);
+    Api.remove('BILLETERA', rowNum).then(function () {
+      showLoader(false); toast('Movimiento eliminado'); loadBilletera(true);
     }).catch(function (err) { showLoader(false); toast(err.message, true); });
   }
 

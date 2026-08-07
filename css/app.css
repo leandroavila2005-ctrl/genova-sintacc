@@ -438,6 +438,13 @@
 .cfg-cols-4 .dt-head, .cfg-cols-4 .dt-row { grid-template-columns: 1fr 1.3fr 1.3fr 1fr 72px; }
 .cfg-cols-5 .dt-head, .cfg-cols-5 .dt-row { grid-template-columns: 1fr 1.1fr 1.3fr 1fr 0.9fr 72px; }
 .cfg-cols-6 .dt-head, .cfg-cols-6 .dt-row { grid-template-columns: 0.9fr 1fr 1.3fr 1fr 0.9fr 0.9fr 72px; }
+.wallet-cards { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+.wallet-card { flex: 1; min-width: 200px; background: var(--color-surface-card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); padding: 16px 22px; }
+.wallet-card .wc-label { font-size: 12px; color: var(--color-text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.wallet-card .wc-value { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-accent-700); }
+.wallet-card .wc-value.neg { color: var(--color-danger); }
+.tbl-billetera .dt-head, .tbl-billetera .dt-row { grid-template-columns: 90px 1fr 110px 130px 64px; }
+.tbl-billetera.has-cta .dt-head, .tbl-billetera.has-cta .dt-row { grid-template-columns: 90px 110px 1fr 110px 130px 64px; }
 .er-scroll { overflow-x: auto; border: 1px solid var(--card-border); border-radius: var(--radius-lg); background: var(--color-surface-card); }
 .er-tbl { border-collapse: collapse; width: 100%; min-width: 960px; font-size: 12px; }
 .er-tbl th, .er-tbl td { padding: 7px 10px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
