@@ -457,8 +457,8 @@
 .er-tbl tr.er-net td, .er-tbl tr.er-net td.c { background: var(--color-ink); color: #fff; font-weight: 600; }
 .er-tbl tr.er-mg td { color: var(--color-accent-700); font-size: 11px; font-style: italic; }
 .er-tbl td.neg { color: var(--color-danger); }
-.tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 1fr 1.2fr 1.4fr 120px; }
-.tbl-precios.has-sel .dt-head, .tbl-precios.has-sel .dt-row { grid-template-columns: 34px 1fr 1.2fr 1.4fr 120px; }
+.tbl-precios .dt-head, .tbl-precios .dt-row { grid-template-columns: 0.9fr 1fr 1.2fr 108px 108px 90px; }
+.tbl-precios.has-sel .dt-head, .tbl-precios.has-sel .dt-row { grid-template-columns: 34px 0.9fr 1fr 1.2fr 108px 108px 90px; }
 .tbl-precios .precio-check, .tbl-precios .precio-check-all { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
 .aumento-box { display: flex; align-items: center; gap: 6px; background: var(--color-surface-warm); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 4px 8px; }
 .aumento-box .aumento-lbl { font-size: 12px; color: var(--color-text-2); white-space: nowrap; }

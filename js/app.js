@@ -213,7 +213,12 @@
     drawIcons();
   }
 
-  function precioOrig(r) { return r['Precio'] == null ? '' : String(r['Precio']); }
+  var PRECIO_COLS = [
+    { key: 'Precio', label: 'Minorista' },
+    { key: 'Precio mayorista', label: 'Mayorista' },
+    { key: 'Cantidad mínima', label: 'Cant. mín.' }
+  ];
+  function precioOrig(r, field) { var f = field || 'Precio'; return r[f] == null ? '' : String(r[f]); }
   function preciosDirtyCount() { return Object.keys(state.precios.edits || {}).length; }
 
   function renderPrecios() {
@@ -231,7 +236,8 @@
       (admin ? '<div class="aumento-box"><span class="aumento-lbl">Aumento %</span>' +
         '<input id="precios-aumento" inputmode="decimal" placeholder="0" value="' + escapeHtml(state.precios.aumento || '') + '">' +
         '<button class="btn-plus" id="precios-aplicar" title="Aplicar aumento a los tildados">+</button></div>' : '') +
-      '<button class="btn btn-secondary" id="precios-pdf" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>Lista de precios</button>' +
+      '<button class="btn btn-secondary" id="precios-pdf-min" style="margin-left:auto;"><span class="ico"><i data-lucide="file-text"></i></span>Lista minorista</button>' +
+      '<button class="btn btn-secondary" id="precios-pdf-may"><span class="ico"><i data-lucide="file-text"></i></span>Lista mayorista</button>' +
       (admin ? '<button class="btn btn-primary" id="precios-save" disabled><span class="ico"><i data-lucide="save"></i></span>Guardar cambios</button>' : '') +
       '</div>';
     var body;
@@ -246,21 +252,28 @@
       var sel = state.precios.sel || {};
       var head = '<div class="dt-head">' +
         (admin ? '<div><input type="checkbox" class="precio-check-all"></div>' : '') +
-        '<div>Categoría</div><div>Artículo</div><div>Producto</div><div class="r-right">Precio</div></div>';
+        '<div>Categoría</div><div>Artículo</div><div>Producto</div>' +
+        PRECIO_COLS.map(function (c) { return '<div class="r-right">' + c.label + '</div>'; }).join('') + '</div>';
       var edits = state.precios.edits || {};
       var trs = rows.map(function (r) {
-        var edited = edits[r._row] !== undefined;
-        var val = edited ? edits[r._row] : precioOrig(r);
-        var dirty = edited && String(edits[r._row]) !== precioOrig(r) ? ' is-dirty' : '';
-        var precioCell = admin
-          ? '<input class="fld-input mono precio-input' + dirty + '" data-row="' + r._row + '" inputmode="decimal" value="' + escapeHtml(val) + '">'
-          : '<span class="num strong">' + (r['Precio'] ? money(r['Precio']) : '—') + '</span>';
+        var re = edits[r._row] || {};
+        var cells = PRECIO_COLS.map(function (c) {
+          var orig = precioOrig(r, c.key);
+          var edited = re[c.key] !== undefined;
+          var val = edited ? re[c.key] : orig;
+          var dirty = edited && String(re[c.key]) !== orig ? ' is-dirty' : '';
+          if (admin) {
+            return '<div class="r-right"><input class="fld-input mono precio-input' + dirty + '" data-row="' + r._row + '" data-field="' + escapeHtml(c.key) + '" inputmode="decimal" value="' + escapeHtml(val) + '"></div>';
+          }
+          var show = c.key === 'Cantidad mínima' ? (r[c.key] ? num(r[c.key]) : '—') : (r[c.key] ? money(r[c.key]) : '—');
+          return '<div class="r-right"><span class="num strong">' + show + '</span></div>';
+        }).join('');
         return '<div class="dt-row">' +
           (admin ? '<div><input type="checkbox" class="precio-check" data-row="' + r._row + '"' + (sel[r._row] ? ' checked' : '') + '></div>' : '') +
           '<div class="muted">' + escapeHtml(r['Categoría'] || '—') + '</div>' +
           '<div style="font-weight:500;">' + escapeHtml(r['Artículo'] || '') + '</div>' +
           '<div>' + escapeHtml(r['Producto'] || '') + '</div>' +
-          '<div class="r-right">' + precioCell + '</div>' +
+          cells +
           '</div>';
       }).join('');
       body = search + note + '<div class="data-table tbl-precios' + (admin ? ' has-sel' : '') + '">' + head + trs + '</div>';
@@ -272,16 +285,19 @@
       renderPrecios();
       var ns = $('precios-search'); if (ns) { ns.focus(); ns.setSelectionRange(ns.value.length, ns.value.length); }
     });
-    var pdf = $('precios-pdf'); if (pdf) pdf.onclick = pdfListaPrecios;
+    var pdfMin = $('precios-pdf-min'); if (pdfMin) pdfMin.onclick = function () { pdfListaPrecios('min'); };
+    var pdfMay = $('precios-pdf-may'); if (pdfMay) pdfMay.onclick = function () { pdfListaPrecios('may'); };
     if (admin) {
       var updateSaveBtn = function () { var b = $('precios-save'); if (b) b.disabled = preciosDirtyCount() === 0; };
       updateSaveBtn();
       Array.prototype.forEach.call($('view').querySelectorAll('.precio-input'), function (el) {
         var rowNum = Number(el.getAttribute('data-row'));
-        var orig = precioOrig((productosLista().filter(function (r) { return r._row === rowNum; })[0]) || {});
+        var field = el.getAttribute('data-field') || 'Precio';
+        var orig = precioOrig((productosLista().filter(function (r) { return r._row === rowNum; })[0]) || {}, field);
         el.addEventListener('input', function () {
-          if (el.value === orig) delete state.precios.edits[rowNum];
-          else state.precios.edits[rowNum] = el.value;
+          var re = state.precios.edits[rowNum] || {};
+          if (el.value === orig) delete re[field]; else re[field] = el.value;
+          if (Object.keys(re).length) state.precios.edits[rowNum] = re; else delete state.precios.edits[rowNum];
           el.classList.toggle('is-dirty', el.value !== orig);
           updateSaveBtn();
         });
@@ -319,12 +335,17 @@
       var rowNum = Number(k);
       var p = productosLista().filter(function (r) { return r._row === rowNum; })[0];
       if (!p) return;
-      var orig = precioOrig(p);
-      var cur = state.precios.edits[rowNum] !== undefined ? state.precios.edits[rowNum] : orig;
-      var nuevo = Math.round(toNum(cur) * factor * 100) / 100;
-      var nuevoStr = String(nuevo);
-      if (nuevoStr === orig) delete state.precios.edits[rowNum];
-      else state.precios.edits[rowNum] = nuevoStr;
+      var re = state.precios.edits[rowNum] || {};
+      // Aumenta minorista y mayorista (si tiene valor); la cantidad mínima no se toca.
+      ['Precio', 'Precio mayorista'].forEach(function (field) {
+        var orig = precioOrig(p, field);
+        var cur = re[field] !== undefined ? re[field] : orig;
+        var base = toNum(cur);
+        if (!(base > 0)) return;
+        var nuevoStr = String(Math.round(base * factor * 100) / 100);
+        if (nuevoStr === orig) delete re[field]; else re[field] = nuevoStr;
+      });
+      if (Object.keys(re).length) state.precios.edits[rowNum] = re; else delete state.precios.edits[rowNum];
     });
     renderPrecios();
     toast('Aumento aplicado · revisá y guardá');
@@ -335,10 +356,12 @@
     if (!keys.length) return;
     setBtnLoading(btn, true, 'Guardar cambios');
     Promise.all(keys.map(function (k) {
-      var rowNum = Number(k), precio = toNum(edits[k]);
-      return Api.update('ListaProd', rowNum, { 'Precio': precio }).then(function () {
+      var rowNum = Number(k), re = edits[k] || {};
+      var record = {};
+      Object.keys(re).forEach(function (field) { record[field] = toNum(re[field]); });
+      return Api.update('ListaProd', rowNum, record).then(function () {
         var p = productosLista().filter(function (r) { return r._row === rowNum; })[0];
-        if (p) p['Precio'] = precio;
+        if (p) Object.keys(record).forEach(function (field) { p[field] = record[field]; });
       });
     })).then(function () {
       state.precios.edits = {};
@@ -347,14 +370,17 @@
     }).catch(function (err) { setBtnLoading(btn, false, 'Guardar cambios'); toast(err.message, true); });
   }
 
-  // PDF: Lista de precios de productos, ordenada por categoría/artículo/producto.
-  function pdfListaPrecios() {
+  // PDF: Lista de precios (minorista o mayorista), ordenada por categoría/artículo/producto.
+  function pdfListaPrecios(tipo) {
     var esc = escapeHtml;
+    var may = tipo === 'may';
+    var titulo = may ? 'Lista de precios mayorista' : 'Lista de precios minorista';
     var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
     var rows = productosLista().slice().sort(function (a, b) {
       return (String(a['Categoría'] || '') + String(a['Artículo'] || '') + String(a['Producto'] || ''))
         .localeCompare(String(b['Categoría'] || '') + String(b['Artículo'] || '') + String(b['Producto'] || ''));
     });
+    var cols = may ? 6 : 5;
     var body = rows.length
       ? rows.map(function (r) {
           return '<tr>' +
@@ -362,13 +388,18 @@
             '<td>' + esc(r['Artículo'] || '') + '</td>' +
             '<td>' + esc(r['Producto'] || '') + '</td>' +
             '<td class="num">' + (r['Kg por envase'] != null && r['Kg por envase'] !== '' ? esc(String(r['Kg por envase'])) : '—') + '</td>' +
-            '<td class="num">' + (r['Precio'] ? money(r['Precio']) : '—') + '</td></tr>';
+            (may
+              ? '<td class="num">' + (r['Precio mayorista'] ? money(r['Precio mayorista']) : '—') + '</td>' +
+                '<td class="num">' + (r['Cantidad mínima'] ? esc(num(r['Cantidad mínima'])) : '—') + '</td>'
+              : '<td class="num">' + (r['Precio'] ? money(r['Precio']) : '—') + '</td>') +
+            '</tr>';
         }).join('')
-      : '<tr><td colspan="5" class="empty">Sin productos cargados.</td></tr>';
-    var section = '<section class="poe"><h2>Lista de precios</h2>' +
-      '<table><thead><tr><th>Categoría</th><th>Artículo</th><th>Producto</th><th class="num">Kg por envase</th><th class="num">Precio</th></tr></thead>' +
-      '<tbody>' + body + '</tbody></table></section>';
-    openPrintDoc('Lista de precios · ' + mesNom + ' ' + anio, 'Lista de precios · ' + mesNom + ' ' + anio, section);
+      : '<tr><td colspan="' + cols + '" class="empty">Sin productos cargados.</td></tr>';
+    var section = '<section class="poe"><h2>' + esc(titulo) + '</h2>' +
+      '<table><thead><tr><th>Categoría</th><th>Artículo</th><th>Producto</th><th class="num">Kg por envase</th>' +
+      (may ? '<th class="num">Precio mayorista</th><th class="num">Cantidad mínima</th>' : '<th class="num">Precio</th>') +
+      '</tr></thead><tbody>' + body + '</tbody></table></section>';
+    openPrintDoc(titulo + ' · ' + mesNom + ' ' + anio, titulo + ' · ' + mesNom + ' ' + anio, section);
   }
 
   function loadingView() {
