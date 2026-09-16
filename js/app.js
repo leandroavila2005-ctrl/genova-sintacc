@@ -2352,11 +2352,18 @@
   function prodKey(r) {
     return String(r['reqId'] || ('P|' + (r['Producto'] || '') + '|' + (r['Lote'] || '') + '|' + (r['Fecha'] || '')));
   }
-  function mpLoteOptions(mpRows, insumoCod, insumoNom, selRef) {
-    var matches = mpRows.filter(function (m) {
+  function mpLoteOptions(mpRows, insumoCod, insumoNom, selRef, mesKey) {
+    // Sólo MP disponibles en el mes de esa producción (mesKey = 'AAAA-MM').
+    var delMes = mesKey ? mpRows.filter(function (m) { return String(m['Fecha'] || '').slice(0, 7) === mesKey; }) : mpRows;
+    var matches = delMes.filter(function (m) {
       return (insumoCod && String(m['ID insumo'] || '') === insumoCod) || (insumoNom && String(m['Nombre'] || '') === insumoNom);
     });
-    var opts = matches.length ? matches : mpRows;
+    var opts = matches.length ? matches : delMes;
+    // conserva la selección ya guardada aunque sea de otro mes
+    if (selRef && !opts.filter(function (m) { return String(m['reqId'] || m._row) === selRef; }).length) {
+      var selRow = mpRows.filter(function (m) { return String(m['reqId'] || m._row) === selRef; })[0];
+      if (selRow) opts = opts.concat([selRow]);
+    }
     var html = '<option value="">Elegir lote…</option>';
     html += opts.map(function (m) {
       var ref = String(m['reqId'] || m._row);
@@ -2371,7 +2378,7 @@
       return '<div class="cons-line" data-i="' + idx + '">' +
         '<div class="cons-mp">' + escapeHtml(ln.nombre || ln.insumo || '—') + '</div>' +
         '<div class="cons-val mono">' + num(ln.valor) + ' g</div>' +
-        '<select class="fld-input fld-select cons-lote">' + mpLoteOptions(consumoCtx.mp, ln.insumo, ln.nombre, ln.mpRef || '') + '</select>' +
+        '<select class="fld-input fld-select cons-lote">' + mpLoteOptions(consumoCtx.mp, ln.insumo, ln.nombre, ln.mpRef || '', consumoCtx.mesKey) + '</select>' +
         '</div>';
     }).join('');
   }
@@ -2422,7 +2429,7 @@
         lines = ings.map(function (g) { var gr = toNum(g.gr); return { insumo: g.insumo || '', nombre: g.nombre || '', gr: gr, valor: gr * units, mpRef: '', lote: '', proveedor: '', vto: '' }; });
       }
       if (!lines.length) { toast('El producto no tiene receta cargada en Configuración', true); return; }
-      consumoCtx = { lines: lines, mp: mpRows, key: key, producto: producto, lote: prodRow['Lote'] || '', row: stamped ? stamped._row : null };
+      consumoCtx = { lines: lines, mp: mpRows, key: key, producto: producto, lote: prodRow['Lote'] || '', row: stamped ? stamped._row : null, mesKey: String(prodRow['Fecha'] || '').slice(0, 7) };
 
       var body =
         '<div class="cfg-sub" style="margin-bottom:14px;">Consumo para ' + escapeHtml(num(units)) + ' unidad(es)' + (stamped ? ' · <b>receta estampada</b>' : '') + '</div>' +
