@@ -2061,14 +2061,15 @@
     var nm = m === 12 ? 1 : m + 1, na = m === 12 ? a + 1 : a;
     return '01/' + ('0' + nm).slice(-2) + '/' + na;
   }
-  // Insumos con valor en el mes: cantidad y total acumulados + precio promedio ponderado.
+  // Insumos con valor en el mes, POR LOTE (para que el saldo inicial arrastre lote/proveedor/vto).
   function mpInsumosMes() {
     var rows = (state.mpprod.mp.rows || []).filter(function (r) { return inPeriod(r['Fecha']); });
     var map = {};
     rows.forEach(function (r) {
       var name = r['Nombre']; if (!name) return;
-      if (!map[name]) map[name] = { nombre: name, id: r['ID insumo'] || '', cant: 0, total: 0 };
-      map[name].cant += toNum(r['Cantidad']); map[name].total += toNum(r['Total']);
+      var key = name + '|' + (r['Lote'] || '');
+      if (!map[key]) map[key] = { nombre: name, id: r['ID insumo'] || '', lote: r['Lote'] || '', prov: r['Proveedor'] || '', vto: r['Fecha Vto'] || '', bulto: r['Bulto cerrado'] || '', cant: 0, total: 0 };
+      map[key].cant += toNum(r['Cantidad']); map[key].total += toNum(r['Total']);
     });
     return Object.keys(map).map(function (k) {
       var m = map[k]; m.pond = m.cant > 0 ? m.total / m.cant : 0; return m;
@@ -2100,8 +2101,10 @@
     }
     var listHtml = items.map(function (it, i) {
       if (isMp) {
+        var subInfo = [it.lote && ('Lote ' + it.lote), it.prov, it.vto && ('Vto ' + it.vto)].filter(Boolean).join(' · ');
         return '<div class="sf-row">' +
-          '<div class="sf-name">' + escapeHtml(it.nombre) + '</div>' +
+          '<div class="sf-name">' + escapeHtml(it.nombre) +
+            (subInfo ? '<div class="muted" style="font-size:11.5px; font-weight:400;">' + escapeHtml(subInfo) + '</div>' : '') + '</div>' +
           '<div class="sf-fields">' +
             '<input id="sf-cant-' + i + '" class="fld-input" placeholder="Cantidad sobrante" value="">' +
             '<div><input id="sf-precio-' + i + '" class="fld-input mono" value="' + Math.round(it.pond) + '">' +
@@ -2128,8 +2131,10 @@
         if (!(cant > 0)) return;
         var precio = toNum($('sf-precio-' + i).value);
         var tot = cant * precio;
-        records.push({ sheet: 'MP', rec: { 'Fecha': sf, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': -cant, 'Precio unitario': precio, 'Total': -tot } });
-        records.push({ sheet: 'MP', rec: { 'Fecha': si, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': cant, 'Precio unitario': precio, 'Total': tot } });
+        // Copia los datos del lote para que el mes siguiente tenga la información completa.
+        var datos = { 'Proveedor': it.prov || '', 'Bulto cerrado': it.bulto || '', 'Lote': it.lote || '', 'Fecha Vto': it.vto || '' };
+        records.push({ sheet: 'MP', rec: Object.assign({ 'Fecha': sf, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': -cant, 'Precio unitario': precio, 'Total': -tot }, datos) });
+        records.push({ sheet: 'MP', rec: Object.assign({ 'Fecha': si, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': cant, 'Precio unitario': precio, 'Total': tot }, datos) });
       } else {
         var uds = toNum($('sf-uds-' + i).value);
         if (!(uds > 0)) return;
