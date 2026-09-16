@@ -2403,10 +2403,12 @@
     if (!rec || !rec['Ingredientes']) return [];
     try { return JSON.parse(rec['Ingredientes']) || []; } catch (e) { return []; }
   }
-  // Completa = tiene ingredientes y todos con lote asignado.
+  // Completa = tiene ingredientes y todos con su MP asignada (aunque la compra no tenga nro de lote).
   function consumoCompleto(prodRow) {
     var ings = recProdIngs(recProdFor(prodRow));
-    return ings.length > 0 && ings.every(function (g) { return g.lote && String(g.lote).trim() !== ''; });
+    return ings.length > 0 && ings.every(function (g) {
+      return (g.mpRef && String(g.mpRef).trim() !== '') || (g.lote && String(g.lote).trim() !== '');
+    });
   }
   function openConsumoModal(prodRow) {
     var producto = prodRow['Producto'] || '';
