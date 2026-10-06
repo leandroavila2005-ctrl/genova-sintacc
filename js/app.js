@@ -1549,7 +1549,11 @@
 
   // PDF imprimible de recepción de materias primas (POE), por categoría, del mes seleccionado.
   function pdfPOE() {
-    var rows = (state.mpprod.mp.rows || []).filter(function (r) { return inPeriod(r['Fecha']); });
+    // Sólo compras reales del mes: excluye saldos (SF negativos y SI arrastrados de meses previos).
+    var rows = (state.mpprod.mp.rows || []).filter(function (r) {
+      var ob = String(r['OBS'] || '').trim().toUpperCase();
+      return inPeriod(r['Fecha']) && toNum(r['Cantidad']) > 0 && ob !== 'SF' && ob !== 'SI';
+    });
     var mesNom = MONTHS[state.period.mes - 1], anio = state.period.anio;
     var grupos = [
       { titulo: 'POE - Recepción de Materias Primas (SECOS)', prefix: 'MPS' },
@@ -2133,8 +2137,8 @@
         var tot = cant * precio;
         // Copia los datos del lote para que el mes siguiente tenga la información completa.
         var datos = { 'Proveedor': it.prov || '', 'Bulto cerrado': it.bulto || '', 'Lote': it.lote || '', 'Fecha Vto': it.vto || '' };
-        records.push({ sheet: 'MP', rec: Object.assign({ 'Fecha': sf, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': -cant, 'Precio unitario': precio, 'Total': -tot }, datos) });
-        records.push({ sheet: 'MP', rec: Object.assign({ 'Fecha': si, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': cant, 'Precio unitario': precio, 'Total': tot }, datos) });
+        records.push({ sheet: 'MP', rec: Object.assign({ 'Fecha': sf, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': -cant, 'Precio unitario': precio, 'Total': -tot, 'OBS': 'SF' }, datos) });
+        records.push({ sheet: 'MP', rec: Object.assign({ 'Fecha': si, 'ID insumo': it.id, 'Nombre': it.nombre, 'Cantidad': cant, 'Precio unitario': precio, 'Total': tot, 'OBS': 'SI' }, datos) });
       } else {
         var uds = toNum($('sf-uds-' + i).value);
         if (!(uds > 0)) return;
